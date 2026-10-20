@@ -4,6 +4,7 @@ mod fonts;
 mod hash;
 mod project_files;
 mod settings;
+mod stylesheets;
 mod video;
 mod waveform;
 
@@ -24,6 +25,9 @@ pub fn run() {
             video::open_video,
             project_files::load_project,
             project_files::save_project,
+            stylesheets::list_stylesheets,
+            stylesheets::save_stylesheet,
+            stylesheets::delete_stylesheet,
             waveform::waveform
         ])
         .run(tauri::generate_context!())

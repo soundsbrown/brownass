@@ -259,7 +259,7 @@ fn is_unwritable(e: &io::Error) -> bool {
 
 /// Writes via a temporary file in the same folder and a rename, so readers
 /// never see a half-written file.
-fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);

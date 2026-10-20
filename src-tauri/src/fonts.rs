@@ -150,7 +150,11 @@ mod tests {
     fn system_index() {
         let start = std::time::Instant::now();
         let index = FontIndex::system();
-        println!("{} names indexed in {:?}", index.by_name.len(), start.elapsed());
+        println!(
+            "{} names indexed in {:?}",
+            index.by_name.len(),
+            start.elapsed()
+        );
         assert!(index.by_name.len() > 10);
     }
 
