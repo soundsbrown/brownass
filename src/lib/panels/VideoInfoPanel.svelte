@@ -8,7 +8,6 @@
 {#if player.video}
   {@const v = player.video}
   <section class="video-info">
-    <h2>Video</h2>
     <dl>
       <dt>File</dt>
       <dd title={v.path}>{fileName}</dd>
@@ -31,15 +30,6 @@
 <style>
   .video-info {
     padding: 10px 12px;
-  }
-
-  h2 {
-    margin: 0 0 8px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--muted);
   }
 
   dl {

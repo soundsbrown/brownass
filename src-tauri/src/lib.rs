@@ -20,6 +20,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             ffmpeg::ffmpeg_status,
             ffmpeg::locate_ffmpeg,
+            fonts::font_families,
             fonts::font_files,
             fonts::missing_fonts,
             video::open_video,

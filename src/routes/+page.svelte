@@ -1,6 +1,6 @@
 <script lang="ts">
   import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
-  import VideoInfoPanel from "$lib/panels/VideoInfoPanel.svelte";
+  import PropertiesPanel from "$lib/panels/PropertiesPanel.svelte";
   import Transport from "$lib/player/Transport.svelte";
   import VideoView from "$lib/player/VideoView.svelte";
   import { player } from "$lib/player/player.svelte";
@@ -125,7 +125,7 @@
   </section>
 
   <aside class="region properties" aria-label="Properties">
-    <VideoInfoPanel />
+    <PropertiesPanel />
   </aside>
 
   <footer class="status">
@@ -179,6 +179,25 @@
 
   :global(button:hover:not(:disabled)) {
     border-color: var(--muted);
+  }
+
+  :global(input:not([type="checkbox"]):not([type="color"]), select) {
+    box-sizing: border-box;
+    padding: 2px 6px;
+    font: inherit;
+    color: var(--fg);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+
+  :global(input:focus, select:focus) {
+    outline: none;
+    border-color: var(--item-selected);
+  }
+
+  :global(input[type="checkbox"]) {
+    accent-color: var(--item-selected);
   }
 
   :global(button:disabled) {

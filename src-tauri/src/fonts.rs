@@ -17,6 +17,9 @@ use ttf_parser::name_id;
 
 pub struct FontIndex {
     by_name: HashMap<String, BTreeSet<PathBuf>>,
+    /// Family names to offer in a font picker (typographic families, the
+    /// primary name of each), sorted case-insensitively.
+    families: Vec<String>,
 }
 
 impl FontIndex {
@@ -33,7 +36,13 @@ impl FontIndex {
 
     fn from_db(db: &fontdb::Database) -> Self {
         let mut by_name: HashMap<String, BTreeSet<PathBuf>> = HashMap::new();
+        let mut families: HashMap<String, String> = HashMap::new();
         for face in db.faces() {
+            if let Some((family, _)) = face.families.first() {
+                families
+                    .entry(normalize(family))
+                    .or_insert_with(|| family.trim().to_owned());
+            }
             let path = match &face.source {
                 fontdb::Source::File(path) => path.clone(),
                 fontdb::Source::SharedFile(path, _) => path.clone(),
@@ -52,7 +61,9 @@ impl FontIndex {
                 }
             }
         }
-        Self { by_name }
+        let mut families: Vec<String> = families.into_values().collect();
+        families.sort_by_key(|f| f.to_lowercase());
+        Self { by_name, families }
     }
 
     /// Files containing faces named `name` (case-insensitive).
@@ -108,6 +119,14 @@ pub async fn font_files(name: String) -> Result<Response, String> {
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// Installed font families, for the font picker.
+#[tauri::command]
+pub async fn font_families() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| FontIndex::system().families.clone())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Which of `names` aren't installed.
@@ -174,6 +193,7 @@ mod tests {
         assert_eq!(index.files("Arial Bold Italic").count(), 1);
         assert_eq!(index.files("Arial-BoldMT").count(), 1);
         assert!(index.contains(" arial "));
+        assert_eq!(index.families, ["Arial"]);
         assert!(!index.contains("Comic Neue Nonexistent"));
     }
 }
