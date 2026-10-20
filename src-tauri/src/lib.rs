@@ -6,6 +6,7 @@ mod hash;
 mod process;
 mod project_files;
 mod settings;
+mod shell;
 mod stylesheets;
 mod video;
 mod waveform;
@@ -14,6 +15,15 @@ mod waveform;
 pub fn run() {
     fonts::warm_up();
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .max_file_size(1_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(3))
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .build(),
+        )
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(ffmpeg::FfmpegState::default())
         .manage(video::OpenedVideo::default())
@@ -36,6 +46,8 @@ pub fn run() {
             video::open_video,
             project_files::load_project,
             project_files::save_project,
+            shell::log_from_ui,
+            shell::open_log_folder,
             stylesheets::list_stylesheets,
             stylesheets::save_stylesheet,
             stylesheets::delete_stylesheet,

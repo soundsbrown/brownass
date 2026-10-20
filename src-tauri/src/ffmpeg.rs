@@ -100,6 +100,10 @@ pub async fn ffmpeg_status(
         Ok(paths) => verify(&paths).await.map(|version| (paths, version)),
         Err(e) => Err(e),
     };
+    match &result {
+        Ok((paths, version)) => log::info!("Using {version} ({})", paths.ffmpeg.display()),
+        Err(e) => log::warn!("ffmpeg not usable: {}", e.message),
+    }
     state.set(result.as_ref().ok().map(|(paths, _)| paths.clone()));
     result.map(|(paths, version)| info(&paths, version))
 }

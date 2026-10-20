@@ -246,18 +246,7 @@ pub async fn delete_stylesheet(
 pub async fn open_stylesheets_folder(app: AppHandle) -> Result<(), String> {
     let dir = dir(&app)?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let program = if cfg!(windows) {
-        "explorer"
-    } else if cfg!(target_os = "macos") {
-        "open"
-    } else {
-        "xdg-open"
-    };
-    std::process::Command::new(program)
-        .arg(&dir)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Could not open the folder: {e}"))
+    crate::shell::open_folder(&dir)
 }
 
 #[cfg(test)]

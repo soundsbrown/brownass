@@ -18,6 +18,7 @@ vi.mock("@tauri-apps/api/core", () => ({
     return typeof r === "function" ? r(args) : r;
   },
   convertFileSrc: (p: string) => `asset://${p}`,
+  isTauri: () => false,
 }));
 
 const { session } = await import("./session.svelte");

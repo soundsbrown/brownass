@@ -1,6 +1,7 @@
 <script lang="ts">
   import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
   import Banner from "$lib/panels/Banner.svelte";
+  import { logUncaughtErrors } from "$lib/log";
   import Sidebar from "$lib/panels/Sidebar.svelte";
   import Transport from "$lib/player/Transport.svelte";
   import VideoView from "$lib/player/VideoView.svelte";
@@ -16,6 +17,7 @@
   import { selection } from "$lib/selection.svelte";
 
   $effect(() => session.init());
+  $effect(() => logUncaughtErrors());
 
   $effect(() => {
     session.changed(projectStore.revision);

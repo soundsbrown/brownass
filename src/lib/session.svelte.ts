@@ -7,6 +7,7 @@ import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
 import { conformToStylesheet, firstStyle } from "$lib/model/stylesheet";
 import { stylesheets } from "$lib/stylesheets.svelte";
+import { log } from "$lib/log";
 import { exporter } from "$lib/export/exporter.svelte";
 import type { Project, VideoRef } from "$lib/model/project";
 import { openVideo, type VideoInfo } from "$lib/player/api";
@@ -261,6 +262,7 @@ class Session {
     } catch (e) {
       this.saveStatus = "error";
       this.saveError = String(e);
+      log("error", `Save failed: ${this.saveError}`);
     }
   }
 }

@@ -512,6 +512,12 @@ pub async fn export_video(
         Err(e) => {
             // Don't leave a partial video behind.
             let _ = fs::remove_file(&output);
+            if let RunError::Failed(stderr) = &e {
+                log::error!(
+                    "Export to {} failed ({settings:?}): {stderr}",
+                    output.display()
+                );
+            }
             Err(match e {
                 RunError::Cancelled => "Cancelled.".into(),
                 RunError::Failed(stderr) => format!("ffmpeg failed: {}", tail(&stderr)),
@@ -586,11 +592,7 @@ pub async fn reveal_export(exports: State<'_, Exports>) -> Result<(), String> {
         .unwrap_or_else(|e| e.into_inner())
         .clone()
         .ok_or("Nothing has been exported yet.")?;
-    let mut cmd = std::process::Command::new("explorer");
-    let mut select = OsString::from("/select,");
-    select.push(&path);
-    cmd.arg(select);
-    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+    crate::shell::reveal_file(&path)
 }
 
 /// The frame at `time` (a frame's start time) with subtitles burned in, as
@@ -933,7 +935,7 @@ mod tests {
                 "-show_entries",
                 "format=duration",
                 "-of",
-                "csv=p=0".as_ref(),
+                "csv=p=0",
             ]
             .map(OsStr::new)
             .into_iter()
@@ -991,7 +993,7 @@ mod tests {
                 "-show_entries",
                 "stream=codec_type,codec_name",
                 "-of",
-                "csv=p=0".as_ref(),
+                "csv=p=0",
             ]
             .map(OsStr::new)
             .into_iter()

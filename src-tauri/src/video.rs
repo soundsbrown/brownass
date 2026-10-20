@@ -65,7 +65,19 @@ pub async fn open_video(
         return Ok(None);
     };
 
-    let info = probe(&paths.ffprobe, &path).await?;
+    let info = probe(&paths.ffprobe, &path).await.inspect_err(|e| {
+        log::warn!("Could not open {}: {e}", path.display());
+    })?;
+    log::info!(
+        "Opened {} ({}x{}, {:.3} fps, {:.2} s, {} / {:?})",
+        path.display(),
+        info.width,
+        info.height,
+        info.fps,
+        info.duration,
+        info.video_codec,
+        info.audio_codec
+    );
     app.asset_protocol_scope()
         .allow_file(&path)
         .map_err(|e| e.to_string())?;
