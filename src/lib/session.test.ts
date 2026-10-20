@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addItem, editText } from "$lib/commands/items";
+import { addItem, editText, setStyle } from "$lib/commands/items";
 import { projectStore } from "$lib/commands/store.svelte";
 import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
@@ -21,6 +21,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 const { session } = await import("./session.svelte");
+const { stylesheets } = await import("./stylesheets.svelte");
 
 const video: VideoInfo = {
   path: "C:\\v\\clip.mp4",
@@ -36,7 +37,7 @@ const saves = () => backend.calls.filter((c) => c.cmd === "save_project").map((c
 
 function addSubtitle(id = "a") {
   projectStore.execute(
-    addItem({ id, type: "text", start: 1, end: 2, layer: 0, text: "hi", styleName: "Default" }),
+    addItem({ id, type: "text", start: 1, end: 2, layer: 0, text: "hi", styleName: "Subtitle" }),
   );
 }
 
@@ -50,7 +51,71 @@ beforeEach(() => {
   backend.calls = [];
   backend.responses = {
     save_project: { projectPath: "C:\\v\\clip.bwass", ass: "written" },
+    list_stylesheets: [],
+    save_stylesheet: null,
   };
+});
+
+const stylesheetSaves = () =>
+  backend.calls
+    .filter((c) => c.cmd === "save_stylesheet")
+    .map((c) => JSON.parse(c.args.json as string));
+
+describe("stylesheets", () => {
+  it("links new projects to the house style", async () => {
+    await openWith({ kind: "none" });
+    const p = projectStore.project!;
+    expect(Object.keys(p.styles)).toEqual(["Subtitle", "Section title"]);
+    expect(p.stylesheet).toBe(stylesheets.default.id);
+  });
+
+  it("writes style edits back to the stylesheet, and undo too", async () => {
+    await openWith({ kind: "none" });
+    backend.calls = [];
+    projectStore.execute(setStyle("Subtitle", { fontName: "Georgia" }));
+    session.changed(projectStore.revision);
+    await stylesheets.put(stylesheets.default); // wait for queued saves
+    expect(stylesheetSaves()[0].styles.Subtitle.fontName).toBe("Georgia");
+
+    projectStore.undo();
+    session.changed(projectStore.revision);
+    expect(stylesheets.default.styles.Subtitle.fontName).toBe("Arial");
+  });
+
+  it("refreshes an existing project from its stylesheet and re-exports it", async () => {
+    const sheet = stylesheets.default;
+    const stored = createProject(video);
+    stored.stylesheet = sheet.id;
+    stored.styles = { Subtitle: { ...sheet.styles.Subtitle, fontSize: 12 } };
+    await openWith({
+      kind: "project",
+      json: serializeProjectFile(stored),
+      path: "C:\\v\\clip.bwass",
+      assChanged: false,
+    });
+    expect(projectStore.project?.styles.Subtitle.fontSize).toBe(sheet.styles.Subtitle.fontSize);
+    // Saved right away, without an edit, so foo.ass shows the new style.
+    await session.flush();
+    const saved = parseProjectFile(saves().at(-1)!.json as string);
+    expect(saved.styles.Subtitle.fontSize).toBe(sheet.styles.Subtitle.fontSize);
+  });
+
+  it("keeps a project's own styles when its stylesheet is gone", async () => {
+    const stored = createProject(video);
+    stored.stylesheet = "deleted-sheet";
+    await openWith({
+      kind: "project",
+      json: serializeProjectFile(stored),
+      path: "C:\\v\\clip.bwass",
+      assChanged: false,
+    });
+    expect(projectStore.project?.stylesheet).toBeUndefined();
+    expect(Object.keys(projectStore.project!.styles)).toEqual(["Default"]);
+    expect(session.prompt).toMatchObject({
+      kind: "message",
+      text: expect.stringMatching(/no longer exists/),
+    });
+  });
 });
 
 describe("session", () => {
@@ -64,7 +129,7 @@ describe("session", () => {
     expect(saves()).toHaveLength(1);
     const { json, ass, overwriteAss } = saves()[0];
     expect(parseProjectFile(json as string).items).toHaveLength(1);
-    expect(ass).toContain("Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,hi");
+    expect(ass).toContain("Dialogue: 0,0:00:01.00,0:00:02.00,Subtitle,,0,0,0,,hi");
     expect(overwriteAss).toBe(false);
     expect(session.saveStatus).toBe("saved");
   });
@@ -140,7 +205,7 @@ describe("session", () => {
     };
     projectStore.execute(editText(projectStore.project!.items[0].id, "edited"));
     await session.flush();
-    expect(saves()[0].ass).toContain(",,edited");
+    expect(saves().at(-1)?.ass).toContain(",,edited");
     expect(session.prompt).toMatchObject({
       text: "The previous clip.ass was kept as clip.ass.bak.",
     });

@@ -5,6 +5,8 @@ import { serializeAss } from "$lib/ass/serialize";
 import { projectStore } from "$lib/commands/store.svelte";
 import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
+import { applyStylesheet, mirrorStyles } from "$lib/model/stylesheet";
+import { stylesheets } from "$lib/stylesheets.svelte";
 import type { Project, VideoRef } from "$lib/model/project";
 import { openVideo, type VideoInfo } from "$lib/player/api";
 import { player } from "$lib/player/player.svelte";
@@ -49,6 +51,9 @@ class Session {
   #savedRevision = 0;
   /** File name of the video's .ass, for messages. */
   #assName = "";
+  /** The project's styles as last mirrored to its stylesheet. */
+  #syncedStyles: Project["styles"] | undefined;
+  #syncedSheet: string | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #saving: Promise<void> = Promise.resolve();
 
@@ -69,6 +74,7 @@ class Session {
 
   /** Call after every project change (watches `projectStore.revision`). */
   changed(revision: number): void {
+    this.#mirrorStyles();
     if (!this.#canSave || revision === this.#savedRevision) return;
     this.saveStatus = "pending";
     clearTimeout(this.#timer);
@@ -111,8 +117,10 @@ class Session {
     this.#assName = withExtension(baseName(info.path), "ass");
 
     let project: Project = createProject(videoRef(info));
+    let isNew = false;
     try {
       const loaded = await invoke<Loaded>("load_project");
+      isNew = loaded.kind === "none";
       switch (loaded.kind) {
         case "project":
           // Keep the project's styles and items, but trust the fresh probe.
@@ -147,9 +155,57 @@ class Session {
         text: `${String(e instanceof Error ? e.message : e)} Changes won't be saved, to keep the existing file intact.`,
       };
     }
+
+    const loadedStyles = project.styles;
+    project = await this.#link(project, isNew);
     projectStore.reset(project);
+    this.#syncedStyles = project.styles;
+    this.#syncedSheet = project.stylesheet;
     this.#savedRevision = projectStore.revision;
     this.saveStatus = "clean";
+    // The stylesheet changed since this project was saved: re-export now so
+    // foo.ass shows the current house style.
+    if (this.#canSave && !isNew && !sameStyles(loadedStyles, project.styles)) {
+      this.#savedRevision = -1;
+      void this.flush();
+    }
+  }
+
+  /**
+   * Links a project to its stylesheet (or the default one, for new, imported
+   * and older projects) and refreshes its styles from it.
+   */
+  async #link(project: Project, isNew: boolean): Promise<Project> {
+    await stylesheets.load();
+    if (project.stylesheet && !stylesheets.get(project.stylesheet)) {
+      this.prompt ??= {
+        kind: "message",
+        tone: "info",
+        text: "This project's stylesheet no longer exists; it keeps the styles saved with it.",
+      };
+      return { ...project, stylesheet: undefined };
+    }
+    const sheet = stylesheets.get(project.stylesheet) ?? stylesheets.default;
+    if (!sheet) return project;
+    const styles = isNew ? { ...sheet.styles } : applyStylesheet(project.styles, sheet);
+    return { ...project, stylesheet: sheet.id, styles };
+  }
+
+  /** Writes style changes in a linked project back to its stylesheet. */
+  #mirrorStyles(): void {
+    const project = projectStore.project;
+    if (!project || !this.#canSave) return;
+    const before = this.#syncedStyles;
+    this.#syncedStyles = project.styles;
+    // Switching stylesheets isn't an edit of either one.
+    if (project.stylesheet !== this.#syncedSheet) {
+      this.#syncedSheet = project.stylesheet;
+      return;
+    }
+    const sheet = stylesheets.get(project.stylesheet);
+    if (!sheet || !before) return;
+    const next = mirrorStyles(sheet, before, project.styles);
+    if (next !== sheet) void stylesheets.put(next);
   }
 
   async #save(): Promise<void> {
@@ -190,6 +246,10 @@ class Session {
 function videoRef(info: VideoInfo): VideoRef {
   const { path, width, height, fps, duration } = info;
   return { path, width, height, fps, duration };
+}
+
+function sameStyles(a: Project["styles"], b: Project["styles"]): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function baseName(path: string): string {
