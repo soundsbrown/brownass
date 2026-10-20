@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { editText } from "$lib/commands/items";
   import { projectStore } from "$lib/commands/store.svelte";
   import { selection } from "$lib/selection.svelte";
   import { formatTime } from "$lib/time";
+  import { wrapInTag, type FormatTag } from "./format";
 
   let field: HTMLTextAreaElement;
 
@@ -31,6 +32,23 @@
     if (item) projectStore.execute(editText(item.id, field.value));
   }
 
+  async function format(tag: FormatTag) {
+    if (!item) return;
+    const edit = wrapInTag(field.value, field.selectionStart, field.selectionEnd, tag);
+    projectStore.execute(editText(item.id, edit.text));
+    await tick();
+    field.focus();
+    field.setSelectionRange(edit.selectionStart, edit.selectionEnd);
+  }
+
+  const buttons: { tag: FormatTag; label: string; title: string }[] = [
+    { tag: "b", label: "B", title: "Bold (Ctrl+B)" },
+    { tag: "i", label: "I", title: "Italic (Ctrl+I)" },
+    { tag: "u", label: "U", title: "Underline (Ctrl+U)" },
+  ];
+  // Keep focus and the selection in the text field when clicking a button.
+  const keepFocus = (e: PointerEvent) => e.preventDefault();
+
   // Enter finishes editing (back to the timeline's shortcuts); Shift+Enter
   // inserts a line break. Undo goes through the project history, so typing
   // stays one undo step and matches what the timeline shows.
@@ -47,6 +65,9 @@
     } else if (e.ctrlKey && key === "z") {
       e.preventDefault();
       projectStore.undo();
+    } else if (e.ctrlKey && !e.shiftKey && (key === "b" || key === "i" || key === "u")) {
+      e.preventDefault();
+      void format(key);
     }
   }
 </script>
@@ -60,6 +81,17 @@
         <span class="muted">({(item.end - item.start).toFixed(3)} s)</span>
       </span>
       <span class="hint">Enter to finish, Shift+Enter for a new line</span>
+      <span class="format">
+        {#each buttons as b (b.tag)}
+          <button
+            class="format-{b.tag}"
+            title={b.title}
+            aria-label={b.title}
+            onpointerdown={keepFocus}
+            onclick={() => format(b.tag)}>{b.label}</button
+          >
+        {/each}
+      </span>
     {:else}
       <span class="muted">Drag in the timeline to create a subtitle, or click one to edit it</span>
     {/if}
@@ -87,7 +119,9 @@
 
   .header {
     display: flex;
+    align-items: center;
     gap: 12px;
+    min-height: 20px;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
   }
@@ -99,6 +133,29 @@
 
   .muted {
     color: var(--muted);
+  }
+
+  .format {
+    display: flex;
+    gap: 2px;
+  }
+
+  .format button {
+    width: 24px;
+    padding: 0;
+    font-size: 12px;
+  }
+
+  .format-b {
+    font-weight: 700;
+  }
+
+  .format-i {
+    font-style: italic;
+  }
+
+  .format-u {
+    text-decoration: underline;
   }
 
   textarea {
