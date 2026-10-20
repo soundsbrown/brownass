@@ -1,6 +1,6 @@
 <script lang="ts">
   import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
-  import PropertiesPanel from "$lib/panels/PropertiesPanel.svelte";
+  import Sidebar from "$lib/panels/Sidebar.svelte";
   import Transport from "$lib/player/Transport.svelte";
   import VideoView from "$lib/player/VideoView.svelte";
   import { player } from "$lib/player/player.svelte";
@@ -83,6 +83,13 @@
         return;
     }
 
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      const next = selection.step(e.key === "ArrowDown" ? 1 : -1);
+      if (next) player.seek(next.start);
+      e.preventDefault();
+      return;
+    }
+
     // Shift+arrow steps one second instead of one frame.
     const stride = e.shiftKey ? Math.round(player.fps) : 1;
     switch (e.key) {
@@ -125,7 +132,7 @@
   </section>
 
   <aside class="region properties" aria-label="Properties">
-    <PropertiesPanel />
+    <Sidebar />
   </aside>
 
   <footer class="status">
