@@ -15,6 +15,7 @@ use tokio::io::AsyncReadExt;
 
 use crate::ffmpeg::{self, FfmpegState};
 use crate::hash;
+use crate::process;
 use crate::video::{OpenedVideo, VideoInfo};
 
 const SAMPLE_RATE: u32 = 16_000;
@@ -65,15 +66,16 @@ async fn extract(
     progress: &Channel<f64>,
 ) -> Result<Vec<u8>, String> {
     let rate = SAMPLE_RATE.to_string();
-    let mut child = ffmpeg::command(ffmpeg)
-        .args(["-v", "error", "-nostdin", "-i"])
-        .arg(&info.path)
-        .args(["-map", "0:a:0", "-vn", "-ac", "1", "-ar", &rate])
-        .args(["-f", "s16le", "-acodec", "pcm_s16le", "-"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Could not run ffmpeg: {e}"))?;
+    let mut child = process::spawn(
+        ffmpeg::command(ffmpeg)
+            .args(["-v", "error", "-nostdin", "-i"])
+            .arg(&info.path)
+            .args(["-map", "0:a:0", "-vn", "-ac", "1", "-ar", &rate])
+            .args(["-f", "s16le", "-acodec", "pcm_s16le", "-"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .map_err(|e| format!("Could not run ffmpeg: {e}"))?;
 
     let mut stdout = child.stdout.take().ok_or("ffmpeg has no stdout")?;
     let mut stderr = child.stderr.take().ok_or("ffmpeg has no stderr")?;

@@ -16,6 +16,7 @@ use tauri_plugin_dialog::DialogExt;
 use tokio::process::Command;
 
 use crate::dialogs;
+use crate::process;
 use crate::settings::Settings;
 
 const FFMPEG: &str = "ffmpeg";
@@ -226,15 +227,33 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    run_in(program, args, None::<&Path>).await
+}
+
+/// Like `run`, with `dir` (if given) as the working directory.
+pub async fn run_in<I, S>(
+    program: &Path,
+    args: I,
+    dir: Option<impl AsRef<Path>>,
+) -> Result<String, FfmpegError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let failed = |detail: String| {
         FfmpegError::new(
             FfmpegErrorKind::Failed,
             format!("Could not run {}: {detail}", program.display()),
         )
     };
-    let output = command(program)
-        .args(args)
-        .output()
+    let mut cmd = command(program);
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+    if let Some(dir) = dir {
+        cmd.current_dir(dir);
+    }
+    let child = process::spawn(&mut cmd).map_err(|e| failed(e.to_string()))?;
+    let output = child
+        .wait_with_output()
         .await
         .map_err(|e| failed(e.to_string()))?;
     if !output.status.success() {

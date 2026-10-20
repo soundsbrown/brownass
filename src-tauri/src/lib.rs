@@ -1,7 +1,9 @@
 mod dialogs;
+mod export;
 mod ffmpeg;
 mod fonts;
 mod hash;
+mod process;
 mod project_files;
 mod settings;
 mod stylesheets;
@@ -18,7 +20,14 @@ pub fn run() {
         .manage(project_files::ProjectFiles::default())
         .manage(waveform::WaveformJobs::default())
         .manage(stylesheets::StylesheetFiles::default())
+        .manage(export::Exports::default())
         .invoke_handler(tauri::generate_handler![
+            export::detect_encoders,
+            export::export_video,
+            export::cancel_export,
+            export::reveal_export,
+            export::render_test_frame,
+            export::export_soft_subtitles,
             ffmpeg::ffmpeg_status,
             ffmpeg::locate_ffmpeg,
             fonts::font_families,
