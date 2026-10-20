@@ -2,7 +2,9 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { serializeAss } from "$lib/ass/serialize";
 import { projectStore } from "$lib/commands/store.svelte";
 import { fontsUsed } from "$lib/render/fonts";
+import { selection } from "$lib/selection.svelte";
 import type { Seconds } from "$lib/time";
+import { ffmpegRange, projectForRange, type ExportRange } from "./range";
 
 export type Encoder =
   "x264" | "x265" | "nvencH264" | "nvencHevc" | "qsvH264" | "qsvHevc" | "amfH264" | "amfHevc";
@@ -36,6 +38,9 @@ interface Exported {
 
 type Status = "idle" | "exporting" | "done" | "failed";
 
+/** Which part of the video a burn-in export covers. */
+export type RangeMode = "whole" | "caption" | "custom";
+
 /** Burn-in and soft-subtitle exports of the open project. */
 class Exporter {
   dialogOpen = $state(false);
@@ -50,8 +55,46 @@ class Exporter {
   /** Object URL of the last rendered test frame. */
   frame = $state<{ url: string; time: Seconds } | null>(null);
   frameBusy = $state(false);
+  rangeMode = $state<RangeMode>("whole");
+  /** The custom range, in video time. */
+  custom = $state<ExportRange>({ start: 0, end: 0 });
 
   #started = 0;
+
+  /** The range to export, or `null` for the whole video; `undefined` if invalid. */
+  get range(): ExportRange | null | undefined {
+    const duration = projectStore.project?.video.duration ?? 0;
+    const item = selection.item;
+    const range =
+      this.rangeMode === "whole"
+        ? null
+        : this.rangeMode === "caption"
+          ? item
+            ? { start: item.start, end: item.end }
+            : undefined
+          : this.custom;
+    if (range === null) return null;
+    if (!range || range.end <= range.start || range.start < 0 || range.end > duration + 1e-6) {
+      return undefined;
+    }
+    return range;
+  }
+
+  setCustom(edge: "start" | "end", t: Seconds): void {
+    this.custom = { ...this.custom, [edge]: t };
+  }
+
+  /** Switches to a custom range, starting from the selected caption or the playhead. */
+  useCustomRange(playhead: Seconds): void {
+    if (this.rangeMode !== "custom" && this.custom.end <= this.custom.start) {
+      const duration = projectStore.project?.video.duration ?? 0;
+      const item = selection.item;
+      this.custom = item
+        ? { start: item.start, end: item.end }
+        : { start: playhead, end: Math.min(duration, playhead + 10) };
+    }
+    this.rangeMode = "custom";
+  }
 
   async detectEncoders(): Promise<void> {
     if (this.encoders) return;
@@ -76,9 +119,13 @@ class Exporter {
 
   /** Burns the subtitles into a copy of the video (asks where to save it). */
   async exportVideo(): Promise<void> {
-    const project = projectStore.project;
-    if (!project || this.status === "exporting") return;
+    const whole = projectStore.project;
+    const range = this.range;
+    if (!whole || range === undefined || this.status === "exporting") return;
     this.saveSettings();
+    // For a range, ffmpeg seeks to it and the subtitles are shifted to match.
+    const ffmpeg = range ? ffmpegRange(range, whole.video.fps) : null;
+    const project = range && ffmpeg ? projectForRange(whole, range, ffmpeg.seek) : whole;
     const onProgress = new Channel<number>();
     onProgress.onmessage = (p) => this.#onProgress(p);
     this.#begin();
@@ -86,7 +133,7 @@ class Exporter {
       const result = await invoke<Exported | null>("export_video", {
         ass: serializeAss(project),
         fonts: fontsUsed(project),
-        settings: this.settings,
+        settings: { ...this.settings, range: ffmpeg },
         onProgress,
       });
       this.#finish(

@@ -99,6 +99,30 @@ pub struct ExportSettings {
     /// (18 is visually lossless for most material, 23 is x264's default).
     pub quality: u8,
     pub speed: Speed,
+    /// Export only part of the video (the frontend shifts the subtitles to
+    /// match `seek`).
+    #[serde(default)]
+    pub range: Option<TimeRange>,
+}
+
+/// A part of the video: ffmpeg seeks to `seek` and encodes `duration`
+/// seconds; `start` and `end` are the range as chosen, for the file name.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeRange {
+    pub seek: f64,
+    pub duration: f64,
+    pub start: f64,
+    pub end: f64,
+}
+
+impl TimeRange {
+    fn is_valid(&self) -> bool {
+        self.seek.is_finite()
+            && self.seek >= 0.0
+            && self.duration.is_finite()
+            && self.duration > 0.0
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -198,10 +222,19 @@ fn export_args(
     audio: Audio,
 ) -> Vec<OsString> {
     let container = Container::of(output);
-    let mut args: Vec<OsString> = ["-hide_banner", "-nostdin", "-y", "-i"]
+    let mut args: Vec<OsString> = ["-hide_banner", "-nostdin", "-y"]
         .map(OsString::from)
         .into();
+    // Seeking at the input restarts timestamps from the seek point; the
+    // subtitles were shifted by the same amount.
+    if let Some(range) = &settings.range {
+        args.extend(["-ss".into(), format!("{:.6}", range.seek).into()]);
+    }
+    args.push("-i".into());
     args.push(input.into());
+    if let Some(range) = &settings.range {
+        args.extend(["-t".into(), format!("{:.6}", range.duration).into()]);
+    }
     for a in ["-map", "0:v:0", "-map", "0:a?", "-vf", ASS_FILTER] {
         args.push(a.into());
     }
@@ -420,6 +453,12 @@ pub struct Exported {
     audio_reencoded: bool,
 }
 
+/// A time for a file name: `H-MM-SS` (colons aren't allowed).
+fn file_time(t: f64) -> String {
+    let total = t.max(0.0).round() as u64;
+    format!("{}-{:02}-{:02}", total / 3600, total / 60 % 60, total % 60)
+}
+
 fn suggested_name(video: &Path, suffix: &str, extension: &str) -> String {
     let stem = video.file_stem().unwrap_or_default().to_string_lossy();
     format!("{stem} ({suffix}).{extension}")
@@ -468,7 +507,14 @@ pub async fn export_video(
 ) -> Result<Option<Exported>, String> {
     let info = video.get().ok_or("No video is open.")?;
     let paths = ffmpeg.paths()?;
-    let name = suggested_name(&info.path, "subtitled", "mp4");
+    if settings.range.is_some_and(|r| !r.is_valid()) {
+        return Err("The export range is empty or invalid.".into());
+    }
+    let suffix = match &settings.range {
+        Some(r) => format!("subtitled {} to {}", file_time(r.start), file_time(r.end)),
+        None => "subtitled".to_owned(),
+    };
+    let name = suggested_name(&info.path, &suffix, "mp4");
     let filters: &[(&str, &[&str])] = &[("MP4 video", &["mp4"]), ("Matroska video", &["mkv"])];
     let Some(output) = ask_output(&app, &info.path, name, filters).await else {
         return Ok(None);
@@ -546,11 +592,12 @@ async fn encode(
         .map_err(|e| RunError::Failed(format!("Could not prepare the export: {e}")))?;
 
     let run = |audio| export_args(&info.path, output, settings, audio);
+    let duration = settings.range.map_or(info.duration, |r| r.duration);
     match run_with_progress(
         &paths.ffmpeg,
         &run(Audio::Copy),
         workdir.path(),
-        info.duration,
+        duration,
         progress,
         cancel,
     )
@@ -560,7 +607,7 @@ async fn encode(
             &paths.ffmpeg,
             &run(Audio::Aac),
             workdir.path(),
-            info.duration,
+            duration,
             progress,
             cancel,
         )
@@ -776,6 +823,7 @@ mod tests {
             encoder,
             quality: 20,
             speed: Speed::Balanced,
+            range: None,
         }
     }
 
@@ -918,6 +966,7 @@ mod tests {
             encoder: Encoder::X264,
             quality: 28,
             speed: Speed::Fast,
+            range: None,
         };
         let (_keep, mut never) = oneshot::channel();
         let args = export_args(&input, &output, &fast, Audio::Copy);
@@ -948,11 +997,61 @@ mod tests {
             "{duration}"
         );
 
+        // A range: frames 300 up to 450 at 29.97 fps, sought half a frame early.
+        let fps = 30000.0 / 1001.0;
+        let (start, end) = (300.0 / fps, 450.0 / fps);
+        let seek = start - 0.5 / fps;
+        let range = TimeRange {
+            seek,
+            duration: end - 0.5 / fps - seek,
+            start,
+            end,
+        };
+        let part = out_dir.path().join("part.mp4");
+        let ranged = ExportSettings {
+            range: Some(range),
+            ..fast
+        };
+        let args = export_args(&input, &part, &ranged, Audio::Copy);
+        assert!(
+            run_with_progress(
+                &ffmpeg,
+                &args,
+                workdir.path(),
+                range.duration,
+                &progress,
+                &mut never
+            )
+            .await
+            .is_ok()
+        );
+        let frames = ffmpeg::run(
+            &ffprobe,
+            [
+                "-v",
+                "error",
+                "-count_frames",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=nb_read_frames",
+                "-of",
+                "csv=p=0",
+            ]
+            .map(OsStr::new)
+            .into_iter()
+            .chain([part.as_os_str()]),
+        )
+        .await
+        .unwrap();
+        assert_eq!(frames.trim(), "150");
+
         // Cancelling stops ffmpeg.
         let slow = ExportSettings {
             encoder: Encoder::X264,
             quality: 18,
             speed: Speed::Small,
+            range: None,
         };
         let cancelled = out_dir.path().join("cancelled.mp4");
         let (cancel, mut on_cancel) = oneshot::channel();
@@ -1003,6 +1102,57 @@ mod tests {
         .unwrap();
         assert!(streams.contains("ass,subtitle"), "{streams}");
         assert!(streams.contains("attachment"), "{streams}");
+    }
+
+    #[test]
+    fn seeks_at_the_input_and_limits_the_duration_for_a_range() {
+        let range = TimeRange {
+            seek: 9.993317,
+            duration: 5.005,
+            start: 10.01,
+            end: 15.015,
+        };
+        let s = ExportSettings {
+            range: Some(range),
+            ..settings(Encoder::X264)
+        };
+        let args = strings(&export_args(
+            Path::new("in.mp4"),
+            Path::new("out.mp4"),
+            &s,
+            Audio::Copy,
+        ));
+        assert_eq!(&args[3..8], ["-ss", "9.993317", "-i", "in.mp4", "-t"]);
+        assert_eq!(args[8], "5.005000");
+        assert!(
+            !strings(&export_args(
+                Path::new("in.mp4"),
+                Path::new("o.mp4"),
+                &settings(Encoder::X264),
+                Audio::Copy
+            ))
+            .contains(&"-ss".to_owned())
+        );
+        assert!(
+            !TimeRange {
+                duration: 0.0,
+                ..range
+            }
+            .is_valid()
+        );
+        assert!(
+            !TimeRange {
+                seek: f64::NAN,
+                ..range
+            }
+            .is_valid()
+        );
+    }
+
+    #[test]
+    fn formats_times_for_file_names() {
+        assert_eq!(file_time(83.5), "0-01-24");
+        assert_eq!(file_time(3723.0), "1-02-03");
     }
 
     #[test]

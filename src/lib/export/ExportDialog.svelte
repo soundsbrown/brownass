@@ -1,6 +1,8 @@
 <script lang="ts">
+  import TimeField from "$lib/panels/TimeField.svelte";
   import { player } from "$lib/player/player.svelte";
-  import { formatTime } from "$lib/time";
+  import { selection } from "$lib/selection.svelte";
+  import { formatTime, snapToFrame, type Seconds } from "$lib/time";
   import { ENCODER_LABELS, exporter, type Speed } from "./exporter.svelte";
 
   interface Props {
@@ -18,6 +20,11 @@
   $effect(() => {
     void exporter.detectEncoders();
   });
+
+  /** Keeps a typed range time inside the video. */
+  function clampTime(t: Seconds): Seconds {
+    return Math.min(Math.max(t, 0), player.duration);
+  }
 
   function close() {
     if (!busy) onClose();
@@ -84,6 +91,63 @@
             </label>
           {/each}
         </div>
+
+        <span class="label top">Range</span>
+        <div class="range">
+          <div class="speeds" role="radiogroup" aria-label="Range">
+            <label class="radio">
+              <input type="radio" bind:group={exporter.rangeMode} value="whole" disabled={busy} />
+              Whole video
+            </label>
+            <label class="radio" title={selection.item ? "" : "Select a caption first"}>
+              <input
+                type="radio"
+                bind:group={exporter.rangeMode}
+                value="caption"
+                disabled={busy || !selection.item}
+              />
+              Selected caption
+            </label>
+            <label class="radio">
+              <input
+                type="radio"
+                checked={exporter.rangeMode === "custom"}
+                disabled={busy}
+                onchange={() => exporter.useCustomRange(player.time)}
+              />
+              Custom
+            </label>
+          </div>
+          {#if exporter.rangeMode === "custom" && player.video}
+            {@const fps = player.video.fps}
+            <div class="custom">
+              <TimeField
+                label="From"
+                value={exporter.custom.start}
+                {fps}
+                onchange={(t) => exporter.setCustom("start", clampTime(snapToFrame(t, fps)))}
+              />
+              <TimeField
+                label="To"
+                value={exporter.custom.end}
+                {fps}
+                onchange={(t) => exporter.setCustom("end", clampTime(snapToFrame(t, fps)))}
+              />
+            </div>
+          {/if}
+          {#if exporter.range}
+            <span class="muted">
+              {formatTime(exporter.range.start)} – {formatTime(exporter.range.end)}
+              ({(exporter.range.end - exporter.range.start).toFixed(2)} s)
+            </span>
+          {:else if exporter.range === undefined}
+            <span class="error">
+              {exporter.rangeMode === "caption"
+                ? "No caption is selected."
+                : "The end must be after the start."}
+            </span>
+          {/if}
+        </div>
       </section>
 
       <section class="frame">
@@ -126,14 +190,14 @@
 
     <footer>
       <button onclick={() => exporter.exportSoftSubtitles()} disabled={busy}>
-        Save MKV with soft subtitles…
+        Save MKV with soft subtitles (whole video)…
       </button>
       <button
         class="primary"
         onclick={() => exporter.exportVideo()}
-        disabled={busy || !exporter.encoders?.length}
+        disabled={busy || !exporter.encoders?.length || exporter.range === undefined}
       >
-        Export video…
+        {exporter.range ? "Export range…" : "Export video…"}
       </button>
     </footer>
   </div>
@@ -231,6 +295,29 @@
   .speeds {
     display: flex;
     gap: 14px;
+  }
+
+  .top {
+    align-self: start;
+    padding-top: 1px;
+  }
+
+  .range {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .custom {
+    display: grid;
+    grid-template-columns: auto auto auto auto;
+    justify-content: start;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .custom :global(.label) {
+    color: var(--muted);
   }
 
   .radio {
