@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { formatAssTime, formatTime, frameAt, frameCount, parseAssTime, timeOfFrame } from "./time";
+import {
+  formatAssTime,
+  formatTime,
+  frameAt,
+  frameCount,
+  parseAssTime,
+  parseTime,
+  snapToFrame,
+  timeOfFrame,
+} from "./time";
 
 const NTSC = 30000 / 1001;
 const FILM = 24000 / 1001;
@@ -49,6 +58,41 @@ describe("formatTime", () => {
 
   it("clamps negative times to zero", () => {
     expect(formatTime(-1)).toBe("0:00:00.000");
+  });
+});
+
+describe("parseTime", () => {
+  it("reads full, short and plain-seconds forms", () => {
+    expect(parseTime("0:01:23.500")).toBeCloseTo(83.5);
+    expect(parseTime("1:02:03")).toBe(3723);
+    expect(parseTime("1:23.5")).toBeCloseTo(83.5);
+    expect(parseTime("83.5")).toBeCloseTo(83.5);
+    expect(parseTime("90")).toBe(90);
+    expect(parseTime(" 1:23,25 ")).toBeCloseTo(83.25);
+    expect(parseTime("5.")).toBe(5);
+  });
+
+  it("parses what formatTime writes", () => {
+    for (const t of [0, 0.001, 59.999, 3723.5, 7199.04]) {
+      expect(parseTime(formatTime(t))).toBeCloseTo(t, 6);
+    }
+  });
+
+  it("rejects out-of-range fields and garbage", () => {
+    expect(parseTime("1:75")).toBeNull();
+    expect(parseTime("1:61:00")).toBeNull();
+    expect(parseTime("")).toBeNull();
+    expect(parseTime("abc")).toBeNull();
+    expect(parseTime("-1")).toBeNull();
+    expect(parseTime("1:2:3:4")).toBeNull();
+  });
+});
+
+describe("snapToFrame", () => {
+  it("rounds to the nearest frame start", () => {
+    expect(snapToFrame(1.019, 25)).toBeCloseTo(1.0);
+    expect(snapToFrame(1.021, 25)).toBeCloseTo(1.04);
+    expect(frameAt(snapToFrame(12.0, NTSC), NTSC)).toBe(360);
   });
 });
 

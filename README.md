@@ -18,7 +18,7 @@ winget install Gyan.FFmpeg
 
 1. **Open a video** (Ctrl+O, or pick one from the recent list).
 2. **Drag in the timeline** below the ruler to create a caption, then type its text. Shift+Enter starts a new line; the **B / I / U** buttons format the selected text.
-3. **Adjust timing** by dragging a caption's middle (move) or edges (resize). Edges snap to frames, the playhead and other captions (hold Alt to turn edge snapping off).
+3. **Adjust timing** by dragging a caption's middle (move) or edges (resize). Edges snap to frames, the playhead and other captions (hold Alt to turn edge snapping off). For exact times, type them under **Properties** (`0:01:23.5`, `1:23.5` or `83.5`; ↑/↓ change them by a frame, Shift by a second).
 4. **Style** captions by choosing a style in **Properties**. Styles come from the video's stylesheet; **Edit styles…** changes them for every video that uses the stylesheet.
 5. **Export** (Ctrl+E) to burn the subtitles into a copy of the video, or save an MKV with them as a separate track.
 

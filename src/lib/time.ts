@@ -36,6 +36,28 @@ export function formatTime(t: Seconds, decimals = 3): string {
 }
 
 /**
+ * Parses a time typed by the user: `H:MM:SS.fff`, `M:SS.fff` or plain
+ * seconds (`83.5`), with `.` or `,` as decimal separator. Minutes and seconds
+ * after a colon must be below 60. Returns `null` if it isn't a time.
+ */
+export function parseTime(text: string): Seconds | null {
+  const m = /^\s*(?:(\d+):)?(?:(\d+):)?(\d+(?:[.,]\d*)?)\s*$/.exec(text);
+  if (!m) return null;
+  const [, first, second, sec] = m;
+  // With one colon the first group is minutes; with two, hours then minutes.
+  const [h, min] = second !== undefined ? [first, second] : [undefined, first];
+  const seconds = Number(sec.replace(",", "."));
+  const minutes = min === undefined ? 0 : Number(min);
+  if ((min !== undefined && seconds >= 60) || (h !== undefined && minutes >= 60)) return null;
+  return Number(h ?? 0) * 3600 + minutes * 60 + seconds;
+}
+
+/** `t` moved to the nearest frame boundary. */
+export function snapToFrame(t: Seconds, fps: number): Seconds {
+  return Math.round(t * fps) / fps;
+}
+
+/**
  * Formats an ASS timestamp, `H:MM:SS.cc`. ASS only has centisecond precision,
  * so this rounds *down*: for a frame's start time that gives a timestamp after
  * the previous frame starts and no later than this one, so renderers switch

@@ -1,11 +1,14 @@
 <script lang="ts">
   import { projectStore } from "$lib/commands/store.svelte";
+  import { setItemSpan } from "$lib/commands/items";
   import { linkStylesheet, setItemStyle } from "$lib/commands/styles";
   import { captionsWithoutStyle, firstStyle, type Stylesheet } from "$lib/model/stylesheet";
   import { selection } from "$lib/selection.svelte";
   import { stylesheets } from "$lib/stylesheets.svelte";
+  import { snapToFrame } from "$lib/time";
   import CaptionList from "./CaptionList.svelte";
   import StylesView from "./StylesView.svelte";
+  import TimeField from "./TimeField.svelte";
   import VideoInfoPanel from "./VideoInfoPanel.svelte";
 
   const project = $derived(projectStore.project);
@@ -27,6 +30,11 @@
     else pendingSwitch = { sheet: next, affected };
   }
 
+  /** Each typed time is an undo step; a run of ↑/↓ nudges on one field is one. */
+  function setTimes(id: string, field: string, start: number, end: number, nudge: boolean) {
+    projectStore.execute(setItemSpan(id, start, end, nudge ? `nudge:${id}:${field}` : undefined));
+  }
+
   function switchTo(next: Stylesheet) {
     pendingSwitch = null;
     projectStore.execute(linkStylesheet(next));
@@ -42,8 +50,36 @@
 
     <section>
       <h2>Properties</h2>
-      {#if caption}
-        <div class="row">
+      {#if caption && project}
+        {@const fps = project.video.fps}
+        <div class="props">
+          <TimeField
+            label="Start"
+            value={caption.start}
+            {fps}
+            onchange={(t, nudge) =>
+              setTimes(caption.id, "start", snapToFrame(t, fps), caption.end, nudge)}
+          />
+          <TimeField
+            label="End"
+            value={caption.end}
+            {fps}
+            onchange={(t, nudge) =>
+              setTimes(caption.id, "end", caption.start, snapToFrame(t, fps), nudge)}
+          />
+          <TimeField
+            label="Duration"
+            value={caption.end - caption.start}
+            {fps}
+            onchange={(d, nudge) =>
+              setTimes(
+                caption.id,
+                "duration",
+                caption.start,
+                caption.start + Math.max(1 / fps, snapToFrame(d, fps)),
+                nudge,
+              )}
+          />
           <label class="label" for="caption-style">Style</label>
           <select
             id="caption-style"
@@ -166,9 +202,19 @@
     gap: 8px;
   }
 
-  .row .label {
-    width: 70px;
+  .props {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    align-items: center;
+    gap: 6px 8px;
+  }
+
+  .props :global(.label) {
     color: var(--muted);
+  }
+
+  .props select {
+    min-width: 0;
   }
 
   .row select {
