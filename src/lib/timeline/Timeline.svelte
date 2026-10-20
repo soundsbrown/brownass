@@ -1,38 +1,59 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { inGesture, newGestureKey } from "$lib/commands/history";
+  import { addItem, minDuration, setItemSpan } from "$lib/commands/items";
+  import { projectStore } from "$lib/commands/store.svelte";
+  import { DEFAULT_STYLE } from "$lib/model/defaults";
   import { player } from "$lib/player/player.svelte";
+  import { selection } from "$lib/selection.svelte";
   import { formatTime } from "$lib/time";
+  import { drawTimeline, type Colors } from "./draw";
+  import { createSpan, moveSpan, resizeSpan, type SnapContext, type Span } from "./drag";
+  import { geometry, hitTest, itemEdges, layoutRows, type Hit } from "./tracks";
   import {
+    clampView,
     fitView,
     follow,
     panBy,
-    pickTicks,
     timeAt,
-    xAt,
     zoomAt,
-    clampView,
     type Extent,
     type View,
   } from "./view";
-  import { PEAK_TO_HEIGHT, peakBetween } from "./waveform";
   import { waveform } from "./waveform.svelte";
 
-  const RULER_HEIGHT = 28;
-  const HEAD_WIDTH = 13;
-  const HEAD_HEIGHT = 16;
   const ZOOM_SPEED = 0.002;
   // Wheel deltas in lines (deltaMode 1) instead of pixels.
   const LINE_HEIGHT = 16;
-  const WAVE_PADDING = 4;
+  /** A drag in empty space shorter than this is a click, not a new subtitle. */
+  const CREATE_THRESHOLD_PX = 4;
+
+  type Gesture =
+    | { kind: "scrub" }
+    | { kind: "create"; anchor: number; layer: number; startX: number; span: Span | null }
+    | { kind: "move"; id: string; offset: number; key: string }
+    | { kind: "resize"; id: string; edge: "start" | "end"; key: string };
 
   let host: HTMLDivElement;
   let canvas: HTMLCanvasElement;
   let width = $state(0);
   let height = $state(0);
   let view = $state<View>({ start: 0, pxPerSec: 1 });
-  let scrubbing = false;
+  let gesture = $state.raw<Gesture | null>(null);
+  let hover = $state.raw<Hit | null>(null);
 
   const extent = $derived<Extent>({ duration: player.duration, width, fps: player.fps });
+  const items = $derived(projectStore.project?.items ?? []);
+  const layout = $derived(layoutRows(items));
+  const geo = $derived(geometry(height, layout.rowLayers.length));
+
+  const cursor = $derived.by(() => {
+    if (gesture?.kind === "move") return "grabbing";
+    const hit = gesture?.kind === "resize" ? { kind: "item", part: "start" } : hover;
+    if (hit?.kind === "item") return hit.part === "body" ? "grab" : "ew-resize";
+    if (hit?.kind === "empty" && player.video) return "crosshair";
+    return "default";
+  });
 
   // Fit the whole video and load its waveform whenever a new one is loaded.
   $effect(() => {
@@ -53,7 +74,7 @@
   $effect(() => {
     const t = player.time;
     untrack(() => {
-      if (!scrubbing) view = follow(view, extent, t);
+      if (gesture?.kind !== "scrub") view = follow(view, extent, t);
     });
   });
 
@@ -84,47 +105,124 @@
     return () => host.removeEventListener("wheel", onWheel);
   });
 
-  function scrubTo(e: PointerEvent) {
-    const x = Math.min(Math.max(e.offsetX, 0), width);
-    player.seek(timeAt(view, x));
+  function pointerX(e: PointerEvent | MouseEvent): number {
+    return Math.min(Math.max(e.offsetX, 0), width);
+  }
+
+  function hitAt(e: PointerEvent | MouseEvent): Hit {
+    return hitTest(e.offsetX, e.offsetY, view, geo, items, layout);
+  }
+
+  /** Snap targets: playhead, video ends and other items' edges. Alt disables. */
+  function snapContext(e: PointerEvent, exclude?: string): SnapContext {
+    return {
+      fps: player.fps,
+      pxPerSec: view.pxPerSec,
+      duration: player.duration,
+      targets: [player.time, 0, player.duration, ...itemEdges(items, exclude)],
+      snapToTargets: !e.altKey,
+    };
   }
 
   function onPointerDown(e: PointerEvent) {
-    if (e.button !== 0 || !player.video) return;
-    scrubbing = true;
+    const project = projectStore.project;
+    if (e.button !== 0 || !player.video || !project) return;
     host.setPointerCapture(e.pointerId);
-    scrubTo(e);
+    const hit = hitAt(e);
+    switch (hit.kind) {
+      case "ruler":
+        gesture = { kind: "scrub" };
+        player.seek(timeAt(view, pointerX(e)));
+        break;
+      case "item": {
+        selection.select(hit.id);
+        const item = items.find((i) => i.id === hit.id);
+        if (!item) return;
+        const key = newGestureKey();
+        gesture =
+          hit.part === "body"
+            ? { kind: "move", id: hit.id, offset: timeAt(view, pointerX(e)) - item.start, key }
+            : { kind: "resize", id: hit.id, edge: hit.part, key };
+        break;
+      }
+      case "empty":
+        selection.select(null);
+        gesture = {
+          kind: "create",
+          anchor: timeAt(view, pointerX(e)),
+          layer: hit.layer,
+          startX: e.offsetX,
+          span: null,
+        };
+        break;
+    }
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (scrubbing) scrubTo(e);
+    const project = projectStore.project;
+    if (!gesture || !project) {
+      hover = player.video ? hitAt(e) : null;
+      return;
+    }
+    const t = timeAt(view, pointerX(e));
+    switch (gesture.kind) {
+      case "scrub":
+        player.seek(t);
+        break;
+      case "create":
+        if (gesture.span || Math.abs(e.offsetX - gesture.startX) >= CREATE_THRESHOLD_PX) {
+          const span = createSpan(gesture.anchor, t, minDuration(project), snapContext(e));
+          gesture = { ...gesture, span };
+        }
+        break;
+      case "move":
+      case "resize": {
+        const { id, key } = gesture;
+        const item = items.find((i) => i.id === id);
+        if (!item) return;
+        const ctx = snapContext(e, id);
+        const next =
+          gesture.kind === "move"
+            ? moveSpan(item, t - gesture.offset, ctx)
+            : resizeSpan(item, gesture.edge, t, minDuration(project), ctx);
+        projectStore.execute(inGesture(setItemSpan(id, next.start, next.end), key));
+        break;
+      }
+    }
   }
 
   function onPointerUp(e: PointerEvent) {
-    scrubbing = false;
+    const project = projectStore.project;
+    if (gesture?.kind === "create" && gesture.span && project) {
+      const id = crypto.randomUUID();
+      const styleName =
+        DEFAULT_STYLE in project.styles ? DEFAULT_STYLE : Object.keys(project.styles)[0];
+      const { start, end } = gesture.span;
+      projectStore.execute(
+        addItem({ id, type: "text", start, end, layer: gesture.layer, text: "", styleName }),
+      );
+      selection.select(id);
+      selection.editText();
+    }
+    gesture = null;
     host.releasePointerCapture(e.pointerId);
+    hover = hitAt(e);
   }
 
-  // Redraws whenever anything draw() reads changes, including player and
-  // waveform state, since effects track reads made inside called functions.
-  $effect(() => {
-    draw(canvas, view, width, height, player.time);
-  });
+  function onDoubleClick(e: MouseEvent) {
+    const hit = hitAt(e);
+    const item = hit.kind === "item" ? items.find((i) => i.id === hit.id) : undefined;
+    if (item) player.seek(item.start);
+  }
 
   function cssVar(name: string): string {
     return getComputedStyle(host).getPropertyValue(name).trim();
   }
 
-  function draw(canvas: HTMLCanvasElement, v: View, w: number, h: number, time: number) {
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx || w === 0) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    const colors = {
+  function colors(): Colors {
+    return {
       ruler: cssVar("--ruler"),
+      track: cssVar("--track"),
       lane: cssVar("--lane"),
       border: cssVar("--border"),
       tick: cssVar("--muted"),
@@ -134,125 +232,46 @@
       wave: cssVar("--wave"),
       waveBg: cssVar("--wave-bg"),
       error: cssVar("--error"),
+      item: cssVar("--item"),
+      itemSelected: cssVar("--item-selected"),
+      itemText: cssVar("--item-text"),
     };
-
-    ctx.fillStyle = colors.ruler;
-    ctx.fillRect(0, 0, w, RULER_HEIGHT);
-    ctx.fillStyle = colors.lane;
-    ctx.fillRect(0, RULER_HEIGHT, w, h - RULER_HEIGHT);
-    ctx.fillStyle = colors.border;
-    ctx.fillRect(0, RULER_HEIGHT - 1, w, 1);
-
-    const video = player.video;
-    if (!video) return;
-
-    if (video.audioCodec) {
-      // The audio "clip" spans the video's duration, like a track in an NLE.
-      const x0 = Math.max(0, xAt(v, 0));
-      const x1 = Math.min(w, xAt(v, video.duration));
-      ctx.fillStyle = colors.waveBg;
-      ctx.fillRect(x0, RULER_HEIGHT, x1 - x0, h - RULER_HEIGHT);
-    }
-
-    drawTicks(ctx, v, w, h, video.fps, colors);
-
-    const laneMid = (RULER_HEIGHT + h) / 2;
-    if (waveform.data) {
-      drawWaveform(ctx, v, w, h, video.duration, colors.wave);
-    } else if (waveform.status === "loading") {
-      const pct = Math.round(waveform.progress * 100);
-      laneText(ctx, `Analyzing audio… ${pct}%`, w / 2, laneMid, colors.tick);
-      ctx.fillStyle = colors.wave;
-      ctx.fillRect(0, h - 2, w * waveform.progress, 2);
-    } else if (waveform.status === "error") {
-      laneText(ctx, `Waveform unavailable: ${waveform.error}`, w / 2, laneMid, colors.error);
-    } else if (!video.audioCodec) {
-      laneText(ctx, "No audio", w / 2, laneMid, colors.tick);
-    }
-
-    drawPlayhead(ctx, Math.round(xAt(v, time)) + 0.5, h, colors.playhead);
   }
 
-  function drawTicks(
-    ctx: CanvasRenderingContext2D,
-    v: View,
-    w: number,
-    h: number,
-    fps: number,
-    colors: Record<string, string>,
-  ) {
-    const { major, subdivisions, decimals } = pickTicks(v.pxPerSec, fps);
-    const minor = major / subdivisions;
-    const end = timeAt(v, w);
-    ctx.font = "11px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-
-    // Step by index rather than accumulating time, so ticks stay exact.
-    for (let i = Math.floor(v.start / minor); i * minor <= end; i++) {
-      const x = Math.round(xAt(v, i * minor)) + 0.5;
-      const isMajor = i % subdivisions === 0;
-      ctx.fillStyle = colors.tick;
-      const tick = isMajor ? 10 : 5;
-      ctx.fillRect(x - 0.5, RULER_HEIGHT - 1 - tick, 1, tick);
-      if (isMajor) {
-        ctx.fillStyle = colors.grid;
-        ctx.fillRect(x - 0.5, RULER_HEIGHT, 1, h - RULER_HEIGHT);
-        ctx.fillStyle = colors.label;
-        ctx.fillText(formatTime(i * minor, decimals), x + 4, 4);
-      }
-    }
-  }
-
-  // One symmetric bar per pixel column, on a dB scale (see PEAK_TO_HEIGHT).
-  function drawWaveform(
-    ctx: CanvasRenderingContext2D,
-    v: View,
-    w: number,
-    h: number,
-    duration: number,
-    color: string,
-  ) {
-    const wf = waveform.data;
-    if (!wf) return;
-    const mid = (RULER_HEIGHT + h) / 2;
-    const maxHalf = (h - RULER_HEIGHT) / 2 - WAVE_PADDING;
-    const xEnd = Math.min(w, Math.ceil(xAt(v, duration)));
-    ctx.fillStyle = color;
-    for (let x = Math.max(0, Math.floor(xAt(v, 0))); x < xEnd; x++) {
-      const half = PEAK_TO_HEIGHT[peakBetween(wf, timeAt(v, x), timeAt(v, x + 1))] * maxHalf;
-      if (half > 0) ctx.fillRect(x, mid - half, 1, Math.max(1, half * 2));
-    }
-  }
-
-  function laneText(
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    x: number,
-    y: number,
-    color: string,
-  ) {
-    ctx.fillStyle = color;
-    ctx.font = "12px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(text, x, y);
-  }
-
-  // A downward-pointing marker on the ruler, with a line through the lanes.
-  function drawPlayhead(ctx: CanvasRenderingContext2D, x: number, h: number, color: string) {
-    ctx.fillStyle = color;
-    ctx.fillRect(x - 0.5, 0, 1, h);
-    const half = HEAD_WIDTH / 2;
-    ctx.beginPath();
-    ctx.moveTo(x - half, 0);
-    ctx.lineTo(x + half, 0);
-    ctx.lineTo(x + half, HEAD_HEIGHT - half);
-    ctx.lineTo(x, HEAD_HEIGHT);
-    ctx.lineTo(x - half, HEAD_HEIGHT - half);
-    ctx.closePath();
-    ctx.fill();
-  }
+  // Redraws whenever anything read here changes.
+  $effect(() => {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx || width === 0) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawTimeline(
+      ctx,
+      {
+        view,
+        width,
+        height,
+        geo,
+        video: player.video,
+        time: player.time,
+        items,
+        layout,
+        selectedId: selection.item?.id ?? null,
+        ghost:
+          gesture?.kind === "create" && gesture.span
+            ? { span: gesture.span, layer: gesture.layer }
+            : null,
+        waveform: {
+          data: waveform.data,
+          status: waveform.status,
+          progress: waveform.progress,
+          error: waveform.error,
+        },
+      },
+      colors(),
+    );
+  });
 </script>
 
 <div
@@ -265,10 +284,13 @@
   aria-valuemax={player.duration}
   aria-valuenow={player.time}
   aria-valuetext={formatTime(player.time)}
+  style:cursor
   onpointerdown={onPointerDown}
   onpointermove={onPointerMove}
   onpointerup={onPointerUp}
   onpointercancel={onPointerUp}
+  onpointerleave={() => (hover = null)}
+  ondblclick={onDoubleClick}
 >
   <canvas bind:this={canvas}></canvas>
 </div>

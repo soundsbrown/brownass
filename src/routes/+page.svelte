@@ -8,6 +8,9 @@
   import { projectStore } from "$lib/commands/store.svelte";
   import { session } from "$lib/session.svelte";
   import Timeline from "$lib/timeline/Timeline.svelte";
+  import TextField from "$lib/editor/TextField.svelte";
+  import { deleteItem, duplicateItem, setItemSpan } from "$lib/commands/items";
+  import { selection } from "$lib/selection.svelte";
 
   $effect(() => session.init());
 
@@ -22,6 +25,14 @@
     );
   }
 
+  function duplicateSelected() {
+    const item = selection.item;
+    if (!item) return;
+    const id = crypto.randomUUID();
+    projectStore.execute(duplicateItem(item.id, id));
+    selection.select(id);
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (isTyping(e.target)) return;
     if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -33,7 +44,9 @@
             ? () => projectStore.redo()
             : key === "z"
               ? () => projectStore.undo()
-              : null;
+              : key === "d"
+                ? duplicateSelected
+                : null;
       if (action) {
         e.preventDefault();
         action();
@@ -41,6 +54,34 @@
       }
     }
     if (!player.video || e.ctrlKey || e.altKey || e.metaKey) return;
+
+    const item = selection.item;
+    switch (e.key) {
+      case "Delete":
+      case "Backspace":
+        if (!item) return;
+        projectStore.execute(deleteItem(item.id));
+        e.preventDefault();
+        return;
+      case "[":
+        if (!item) return;
+        projectStore.execute(setItemSpan(item.id, player.time, item.end));
+        e.preventDefault();
+        return;
+      case "]":
+        if (!item) return;
+        projectStore.execute(setItemSpan(item.id, item.start, player.time));
+        e.preventDefault();
+        return;
+      case "Enter":
+        if (!item) return;
+        selection.editText();
+        e.preventDefault();
+        return;
+      case "Escape":
+        selection.select(null);
+        return;
+    }
 
     // Shift+arrow steps one second instead of one frame.
     const stride = e.shiftKey ? Math.round(player.fps) : 1;
@@ -80,7 +121,7 @@
   </section>
 
   <section class="region text" aria-label="Subtitle text">
-    <span class="placeholder">Text field</span>
+    <TextField />
   </section>
 
   <aside class="region properties" aria-label="Properties">
@@ -104,7 +145,11 @@
     --error: #e5756b;
     --warn: #e5c07b;
     --ruler: #2a2d33;
+    --track: #232529;
     --lane: #1f2125;
+    --item: #355f91;
+    --item-selected: #4f86c6;
+    --item-text: #e9eff7;
     --grid: rgba(255, 255, 255, 0.05);
     --playhead: #d4d7dc;
     --wave: #6fcf97;
@@ -144,7 +189,7 @@
   .app {
     display: grid;
     grid-template-columns: 1fr 300px;
-    grid-template-rows: 1fr 180px 90px auto;
+    grid-template-rows: 1fr 230px 100px auto;
     grid-template-areas:
       "video properties"
       "timeline properties"
@@ -182,10 +227,6 @@
   }
   .properties > :global(*) {
     flex: 1;
-  }
-
-  .placeholder {
-    color: var(--muted);
   }
 
   .status {
