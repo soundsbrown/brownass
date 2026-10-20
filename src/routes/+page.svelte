@@ -1,5 +1,6 @@
 <script lang="ts">
   import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
+  import Banner from "$lib/panels/Banner.svelte";
   import Sidebar from "$lib/panels/Sidebar.svelte";
   import Transport from "$lib/player/Transport.svelte";
   import VideoView from "$lib/player/VideoView.svelte";
@@ -140,7 +141,8 @@
   </section>
 
   <aside class="region properties" aria-label="Properties">
-    <Sidebar />
+    <Banner />
+    <div class="sidebar-body"><Sidebar /></div>
   </aside>
 
   <footer class="status">
@@ -256,11 +258,13 @@
   }
   .properties {
     grid-area: properties;
-    align-items: flex-start;
-    justify-content: stretch;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
   }
-  .properties > :global(*) {
+  .sidebar-body {
     flex: 1;
+    min-height: 0;
   }
 
   .status {
