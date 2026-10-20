@@ -1,4 +1,5 @@
 import { DEFAULT_STYLE, createProject, defaultStyle } from "$lib/model/defaults";
+import { scaleStyle, styleScale, unscaleStyle } from "$lib/model/scale";
 import type { Alignment, AssStyle, Color, Project, TextItem, VideoRef } from "$lib/model/project";
 import { parseAssTime } from "$lib/time";
 import { parseColor } from "./color";
@@ -188,7 +189,9 @@ function parseStyles(
     const name = get("name")?.trim();
     if (!name || /[,\r\n]/.test(name)) continue;
 
-    const base = defaultStyle(playRes);
+    // Values are read in the file's pixels, then converted to reference pixels.
+    const factor = styleScale(playRes);
+    const base = scaleStyle(defaultStyle(), factor);
     const num = (key: string, fallback: number) => {
       const n = Number(get(key));
       return get(key) !== undefined && Number.isFinite(n) ? n : fallback;
@@ -208,30 +211,36 @@ function parseStyles(
         : 2;
 
     if (name in styles) warnings.push(`Style "${name}" is defined twice; the last one is used.`);
-    styles[name] = {
-      fontName: get("fontname")?.trim() || base.fontName,
-      fontSize: Math.max(0, num("fontsize", base.fontSize)),
-      primaryColor: color("primarycolour", base.primaryColor),
-      secondaryColor: color("secondarycolour", base.secondaryColor),
-      outlineColor: color("outlinecolour", color("tertiarycolour", base.outlineColor)),
-      backColor: color("backcolour", base.backColor),
-      bold: bool("bold", base.bold),
-      italic: bool("italic", base.italic),
-      underline: bool("underline", base.underline),
-      strikeOut: bool("strikeout", base.strikeOut),
-      scaleX: Math.max(0, num("scalex", base.scaleX)),
-      scaleY: Math.max(0, num("scaley", base.scaleY)),
-      spacing: num("spacing", base.spacing),
-      angle: num("angle", base.angle),
-      borderStyle: int("borderstyle", 1) === 3 ? 3 : 1,
-      outline: Math.max(0, num("outline", base.outline)),
-      shadow: Math.max(0, num("shadow", base.shadow)),
-      alignment,
-      marginL: int("marginl", base.marginL),
-      marginR: int("marginr", base.marginR),
-      marginV: int("marginv", base.marginV),
-      encoding: int("encoding", base.encoding),
-    };
+    styles[name] = unscaleStyle(
+      {
+        fontName: get("fontname")?.trim() || base.fontName,
+        fontSize: Math.max(0, num("fontsize", base.fontSize)),
+        primaryColor: color("primarycolour", base.primaryColor),
+        secondaryColor: color("secondarycolour", base.secondaryColor),
+        outlineColor: color("outlinecolour", color("tertiarycolour", base.outlineColor)),
+        backColor: color("backcolour", base.backColor),
+        bold: bool("bold", base.bold),
+        italic: bool("italic", base.italic),
+        underline: bool("underline", base.underline),
+        strikeOut: bool("strikeout", base.strikeOut),
+        scaleX: Math.max(0, num("scalex", base.scaleX)),
+        scaleY: Math.max(0, num("scaley", base.scaleY)),
+        spacing: num("spacing", base.spacing),
+        angle: num("angle", base.angle),
+        borderStyle: int("borderstyle", 1) === 3 ? 3 : 1,
+        outline: Math.max(0, num("outline", base.outline)),
+        shadow: Math.max(0, num("shadow", base.shadow)),
+        alignment,
+        marginL: int("marginl", base.marginL),
+        marginR: int("marginr", base.marginR),
+        marginV: int("marginv", base.marginV),
+        encoding: int("encoding", base.encoding),
+        blur: 0,
+        fadeIn: 0,
+        fadeOut: 0,
+      },
+      factor,
+    );
   }
   return styles;
 }

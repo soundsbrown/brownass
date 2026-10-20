@@ -26,6 +26,41 @@ function sample(): Project {
   return p;
 }
 
+describe("migrations", () => {
+  it("upgrades v1: styles to reference pixels, with blur and fade", () => {
+    const v1 = {
+      version: 1,
+      video: { path: "v.mp4", width: 1280, height: 720, fps: 25, duration: 10 },
+      playRes: { x: 1280, y: 720 },
+      styles: {
+        Default: {
+          ...createProject({ path: "", width: 1, height: 1, fps: 1, duration: 1 }).styles.Default,
+          fontSize: 40,
+          outline: 2,
+          marginV: 30,
+          blur: undefined,
+          fadeIn: undefined,
+          fadeOut: undefined,
+        },
+      },
+      items: [
+        { id: "a", type: "text", start: 0, end: 1, layer: 0, text: "x", styleName: "Default" },
+      ],
+    };
+    const p = parseProjectFile(JSON.stringify(v1));
+    expect(p.version).toBe(PROJECT_VERSION);
+    expect(p.styles.Default).toMatchObject({
+      fontSize: 60,
+      outline: 3,
+      marginV: 45,
+      blur: 0,
+      fadeIn: 0,
+      fadeOut: 0,
+    });
+    expect(p.items).toHaveLength(1);
+  });
+});
+
 describe("project file", () => {
   it("round-trips losslessly", () => {
     const p = sample();

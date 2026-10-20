@@ -19,6 +19,13 @@ describe("parseAss", () => {
     expect(serializeAss(project)).toBe(golden);
   });
 
+  it("writes a lower-resolution file's styles back exactly", () => {
+    const original = fixture("aegisub-sample.ass");
+    const styleLines = (text: string) => text.split("\n").filter((l) => l.startsWith("Style:"));
+    const { project } = parseAss(original, video);
+    expect(styleLines(serializeAss(project))).toEqual(styleLines(original));
+  });
+
   it("produces a valid project", () => {
     const { project } = parseAss(fixture("aegisub-sample.ass"), video);
     expect(() => parseProjectFile(serializeProjectFile(project))).not.toThrow();
@@ -30,7 +37,9 @@ describe("parseAss", () => {
     expect(Object.keys(project.styles)).toEqual(["Default", "Sign"]);
     expect(project.styles.Sign).toMatchObject({
       fontName: "Trebuchet MS",
-      fontSize: 42.5,
+      // 42.5 px in a 720-line script is 63.75 reference (1080-line) pixels.
+      fontSize: 63.75,
+      marginV: 15,
       bold: true,
       alignment: 8,
       primaryColor: { r: 0x22, g: 0x88, b: 0xff, a: 255 },

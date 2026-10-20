@@ -2,11 +2,11 @@ import { PROJECT_VERSION, type AssStyle, type Project, type VideoRef } from "./p
 
 export const DEFAULT_STYLE = "Default";
 
-/** A readable default style, sized relative to the video resolution. */
-export function defaultStyle(playRes: { x: number; y: number }): AssStyle {
+/** A readable default style (in 1080-line reference pixels). */
+export function defaultStyle(): AssStyle {
   return {
     fontName: "Arial",
-    fontSize: Math.round(playRes.y * 0.055),
+    fontSize: 59,
     primaryColor: { r: 255, g: 255, b: 255, a: 255 },
     secondaryColor: { r: 255, g: 0, b: 0, a: 255 },
     outlineColor: { r: 0, g: 0, b: 0, a: 255 },
@@ -20,13 +20,16 @@ export function defaultStyle(playRes: { x: number; y: number }): AssStyle {
     spacing: 0,
     angle: 0,
     borderStyle: 1,
-    outline: Math.max(1, Math.round(playRes.y * 0.0025)),
+    outline: 3,
     shadow: 0,
     alignment: 2,
-    marginL: Math.round(playRes.x * 0.03),
-    marginR: Math.round(playRes.x * 0.03),
-    marginV: Math.round(playRes.y * 0.04),
+    marginL: 58,
+    marginR: 58,
+    marginV: 43,
     encoding: 1,
+    blur: 0,
+    fadeIn: 0,
+    fadeOut: 0,
   };
 }
 
@@ -37,7 +40,7 @@ export function createProject(video: VideoRef): Project {
     version: PROJECT_VERSION,
     video,
     playRes,
-    styles: { [DEFAULT_STYLE]: defaultStyle(playRes) },
+    styles: { [DEFAULT_STYLE]: defaultStyle() },
     items: [],
   };
 }

@@ -5,7 +5,29 @@ import { PROJECT_VERSION, ProjectSchema, type Project } from "./project";
  * Upgrades a project from version `n` to `n + 1`. Add an entry here (and bump
  * PROJECT_VERSION) whenever the schema changes; never edit existing entries.
  */
-const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string, unknown>> = {};
+const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string, unknown>> = {
+  // v2: style sizes move from playRes pixels to 1080-line reference pixels,
+  // and styles gain blur and fade. (Self-contained on purpose: migrations
+  // must not change when the current code does.)
+  1: (old) => {
+    const playRes = old.playRes as { x: number; y: number };
+    const factor = Math.min(playRes.x, playRes.y) / 1080;
+    const scaled = ["fontSize", "spacing", "outline", "shadow", "marginL", "marginR", "marginV"];
+    const styles = Object.fromEntries(
+      Object.entries(old.styles as Record<string, Record<string, number>>).map(([name, style]) => [
+        name,
+        {
+          ...style,
+          ...Object.fromEntries(scaled.map((k) => [k, style[k] / factor])),
+          blur: 0,
+          fadeIn: 0,
+          fadeOut: 0,
+        },
+      ]),
+    );
+    return { ...old, styles };
+  },
+};
 
 export class ProjectFileError extends Error {}
 
