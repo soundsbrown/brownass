@@ -100,7 +100,7 @@ describe("stylesheets", () => {
     expect(saved.styles.Subtitle.fontSize).toBe(sheet.styles.Subtitle.fontSize);
   });
 
-  it("keeps a project's own styles when its stylesheet is gone", async () => {
+  it("moves a project whose stylesheet is gone to the default one", async () => {
     const stored = createProject(video);
     stored.stylesheet = "deleted-sheet";
     await openWith({
@@ -109,8 +109,8 @@ describe("stylesheets", () => {
       path: "C:\\v\\clip.bwass",
       assChanged: false,
     });
-    expect(projectStore.project?.stylesheet).toBeUndefined();
-    expect(Object.keys(projectStore.project!.styles)).toEqual(["Default"]);
+    expect(projectStore.project?.stylesheet).toBe(stylesheets.default.id);
+    expect(Object.keys(projectStore.project!.styles)).toEqual(["Subtitle", "Section title"]);
     expect(session.prompt).toMatchObject({
       kind: "message",
       text: expect.stringMatching(/no longer exists/),
@@ -163,7 +163,11 @@ describe("session", () => {
     expect(projectStore.project?.items.map((i) => i.id)).toEqual(["x"]);
     expect(projectStore.project?.video.path).toBe(video.path);
     expect(projectStore.project?.video.duration).toBe(60);
-    expect(session.prompt).toBeNull();
+    // Its "Default" style isn't in the stylesheet, so the caption is moved.
+    expect((projectStore.project?.items[0] as { styleName: string }).styleName).toBe("Subtitle");
+    expect(session.prompt).toMatchObject({
+      text: expect.stringMatching(/^1 caption used a style/),
+    });
   });
 
   it("never overwrites a project file it could not load", async () => {
@@ -179,22 +183,30 @@ describe("session", () => {
     expect(saves()).toEqual([]);
   });
 
-  it("imports an existing .ass when there is no project", async () => {
+  it("imports the text and timing of an existing .ass when there is no project", async () => {
     const ass = [
       "[Script Info]",
       "PlayResX: 1280",
       "PlayResY: 720",
       "[Events]",
       "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Imported\\Nline",
+      "Dialogue: 0,0:00:01.00,0:00:02.00,Sign,,0,0,0,,{\\an8}Imported\\Nline",
       "Comment: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,note",
     ].join("\n");
     await openWith({ kind: "ass", text: ass, path: "C:\\v\\clip.ass" });
-    expect(projectStore.project?.items).toMatchObject([{ text: "Imported\nline", start: 1 }]);
+    const p = projectStore.project!;
+    expect(p.items).toMatchObject([{ text: "Imported\nline", start: 1, styleName: "Subtitle" }]);
+    // The video's resolution and the stylesheet's styles, not the file's.
+    expect(p.playRes).toEqual({ x: 1280, y: 720 });
+    expect(Object.keys(p.styles)).toEqual(["Subtitle", "Section title"]);
     expect(session.prompt).toMatchObject({
       kind: "message",
-      text: "Imported clip.ass: 1 subtitle. 1 note (hover).",
-      details: ["1 comment line not kept."],
+      text: "Imported clip.ass: 1 subtitle. 3 notes (hover).",
+      details: [
+        "1 comment line not kept.",
+        "Formatting tags removed from 1 caption.",
+        `The file's styles aren't used; every caption uses "Subtitle".`,
+      ],
     });
 
     // Editing exports the .ass again; the backend backs up the original.

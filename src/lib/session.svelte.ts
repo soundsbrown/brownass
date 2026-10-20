@@ -1,11 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { parseAss } from "$lib/ass/parse";
+import { importCaptions } from "$lib/ass/importCaptions";
 import { serializeAss } from "$lib/ass/serialize";
 import { projectStore } from "$lib/commands/store.svelte";
 import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
-import { applyStylesheet, mirrorStyles } from "$lib/model/stylesheet";
+import { conformToStylesheet, firstStyle } from "$lib/model/stylesheet";
 import { stylesheets } from "$lib/stylesheets.svelte";
 import type { Project, VideoRef } from "$lib/model/project";
 import { openVideo, type VideoInfo } from "$lib/player/api";
@@ -117,31 +117,25 @@ class Session {
     this.#assName = withExtension(baseName(info.path), "ass");
 
     let project: Project = createProject(videoRef(info));
-    let isNew = false;
+    let fromFile = false;
+    let imported: { file: string; notes: string[] } | null = null;
     try {
       const loaded = await invoke<Loaded>("load_project");
-      isNew = loaded.kind === "none";
       switch (loaded.kind) {
         case "project":
           // Keep the project's styles and items, but trust the fresh probe.
           project = { ...parseProjectFile(loaded.json), video: videoRef(info) };
+          fromFile = true;
           this.savedTo = loaded.path;
           if (loaded.assChanged) this.prompt = { kind: "assConflict", file: this.#assName };
           break;
         case "ass": {
-          const { project: imported, warnings } = parseAss(loaded.text, videoRef(info));
-          project = imported;
-          const count = imported.items.length;
-          this.prompt = {
-            kind: "message",
-            tone: "info",
-            text:
-              `Imported ${baseName(loaded.path)}: ${count} subtitle${count === 1 ? "" : "s"}.` +
-              (warnings.length
-                ? ` ${warnings.length} note${warnings.length === 1 ? "" : "s"} (hover).`
-                : ""),
-            details: warnings,
-          };
+          // Only timing and text: the captions take the stylesheet's styles.
+          await stylesheets.load();
+          const sheet = stylesheets.default;
+          const result = importCaptions(loaded.text, videoRef(info), firstStyle(sheet));
+          project = { ...project, stylesheet: sheet.id, items: result.items };
+          imported = { file: baseName(loaded.path), notes: result.notes };
           break;
         }
         case "none":
@@ -156,16 +150,33 @@ class Session {
       };
     }
 
-    const loadedStyles = project.styles;
-    project = await this.#link(project, isNew);
+    const before = project;
+    const linked = await this.#link(project);
+    project = linked.project;
+
+    if (imported) {
+      const notes = [...imported.notes, ...linked.notes];
+      const count = project.items.length;
+      this.prompt = {
+        kind: "message",
+        tone: "info",
+        text:
+          `Imported ${imported.file}: ${count} subtitle${count === 1 ? "" : "s"}.` +
+          (notes.length ? ` ${notes.length} note${notes.length === 1 ? "" : "s"} (hover).` : ""),
+        details: notes,
+      };
+    } else if (linked.notes.length > 0) {
+      this.prompt ??= { kind: "message", tone: "info", text: linked.notes.join(" ") };
+    }
+
     projectStore.reset(project);
     this.#syncedStyles = project.styles;
     this.#syncedSheet = project.stylesheet;
     this.#savedRevision = projectStore.revision;
     this.saveStatus = "clean";
-    // The stylesheet changed since this project was saved: re-export now so
-    // foo.ass shows the current house style.
-    if (this.#canSave && !isNew && !sameStyles(loadedStyles, project.styles)) {
+    // The stylesheet changed since this project was saved (or captions had to
+    // be reassigned): save now so foo.ass shows the current house style.
+    if (this.#canSave && fromFile && !sameContent(before, project)) {
       this.#savedRevision = -1;
       void this.flush();
     }
@@ -173,39 +184,41 @@ class Session {
 
   /**
    * Links a project to its stylesheet (or the default one, for new, imported
-   * and older projects) and refreshes its styles from it.
+   * and older projects, or if its stylesheet was deleted) and gives it exactly
+   * that stylesheet's styles. Returns notes for the user.
    */
-  async #link(project: Project, isNew: boolean): Promise<Project> {
+  async #link(project: Project): Promise<{ project: Project; notes: string[] }> {
     await stylesheets.load();
-    if (project.stylesheet && !stylesheets.get(project.stylesheet)) {
-      this.prompt ??= {
-        kind: "message",
-        tone: "info",
-        text: "This project's stylesheet no longer exists; it keeps the styles saved with it.",
-      };
-      return { ...project, stylesheet: undefined };
+    const notes: string[] = [];
+    let sheet = stylesheets.get(project.stylesheet);
+    if (!sheet) {
+      sheet = stylesheets.default;
+      if (!sheet) return { project, notes };
+      if (project.stylesheet) {
+        notes.push(`This project's stylesheet no longer exists, so it now uses "${sheet.name}".`);
+      }
     }
-    const sheet = stylesheets.get(project.stylesheet) ?? stylesheets.default;
-    if (!sheet) return project;
-    const styles = isNew ? { ...sheet.styles } : applyStylesheet(project.styles, sheet);
-    return { ...project, stylesheet: sheet.id, styles };
+    const { project: linked, reassigned } = conformToStylesheet(project, sheet);
+    if (reassigned > 0) {
+      notes.push(
+        `${reassigned} caption${reassigned === 1 ? "" : "s"} used a style "${sheet.name}" doesn't have, and now use${reassigned === 1 ? "s" : ""} "${firstStyle(sheet)}".`,
+      );
+    }
+    return { project: linked, notes };
   }
 
-  /** Writes style changes in a linked project back to its stylesheet. */
+  /** A linked project's styles are its stylesheet's: write changes back. */
   #mirrorStyles(): void {
     const project = projectStore.project;
     if (!project || !this.#canSave) return;
-    const before = this.#syncedStyles;
-    this.#syncedStyles = project.styles;
-    // Switching stylesheets isn't an edit of either one.
-    if (project.stylesheet !== this.#syncedSheet) {
-      this.#syncedSheet = project.stylesheet;
-      return;
-    }
     const sheet = stylesheets.get(project.stylesheet);
-    if (!sheet || !before) return;
-    const next = mirrorStyles(sheet, before, project.styles);
-    if (next !== sheet) void stylesheets.put(next);
+    // Switching stylesheets isn't an edit of either one.
+    const sameSheet = project.stylesheet === this.#syncedSheet;
+    if (sheet && sameSheet && project.styles !== this.#syncedStyles) {
+      void stylesheets.put({ ...sheet, styles: project.styles });
+    }
+    this.#syncedStyles = project.styles;
+    this.#syncedSheet = project.stylesheet;
   }
 
   async #save(): Promise<void> {
@@ -248,8 +261,8 @@ function videoRef(info: VideoInfo): VideoRef {
   return { path, width, height, fps, duration };
 }
 
-function sameStyles(a: Project["styles"], b: Project["styles"]): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+function sameContent(a: Project, b: Project): boolean {
+  return JSON.stringify([a.styles, a.items]) === JSON.stringify([b.styles, b.items]);
 }
 
 function baseName(path: string): string {

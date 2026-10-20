@@ -8,6 +8,8 @@ export interface ImportResult {
   project: Project;
   /** Things that could not be represented, in a form fit to show the user. */
   warnings: string[];
+  /** The subset of `warnings` about events (skipped lines), not styles. */
+  eventNotes: string[];
 }
 
 // Legacy SSA ([V4 Styles]) alignment: 1-3 bottom, +4 top, +8 middle.
@@ -58,7 +60,9 @@ export function parseAss(text: string, video: VideoRef): ImportResult {
   const styles = parseStyles(styleLines, playRes, legacy, warnings);
   if (Object.keys(styles).length > 0) project.styles = styles;
 
-  project.items = parseEvents(sections.get("events") ?? [], project.styles, warnings);
+  const eventNotes: string[] = [];
+  project.items = parseEvents(sections.get("events") ?? [], project.styles, warnings, eventNotes);
+  warnings.push(...eventNotes);
 
   const dropped = [...sections.keys()].filter(
     (s) => !["script info", "v4+ styles", "v4 styles", "events", ""].includes(s),
@@ -68,7 +72,7 @@ export function parseAss(text: string, video: VideoRef): ImportResult {
       `Not kept: ${dropped.map((s) => `[${s}]`).join(", ")} section${dropped.length > 1 ? "s" : ""}.`,
     );
   }
-  return { project, warnings };
+  return { project, warnings, eventNotes };
 }
 
 /** Lines per lower-cased section name; lines before any header go under "". */
@@ -249,6 +253,7 @@ function parseEvents(
   lines: string[],
   styles: Record<string, AssStyle>,
   warnings: string[],
+  eventNotes: string[],
 ): TextItem[] {
   const format = formatOf(lines, DEFAULT_EVENT_FORMAT);
   // Text must be last; that's what lets it contain commas.
@@ -302,9 +307,9 @@ function parseEvents(
       `Unknown style${unknownStyles.size > 1 ? "s" : ""} ${[...unknownStyles].map((s) => `"${s}"`).join(", ")} replaced by "${fallbackStyle}".`,
     );
   }
-  if (comments > 0) warnings.push(`${comments} comment line${comments > 1 ? "s" : ""} not kept.`);
+  if (comments > 0) eventNotes.push(`${comments} comment line${comments > 1 ? "s" : ""} not kept.`);
   if (invalid > 0) {
-    warnings.push(
+    eventNotes.push(
       `${invalid} event${invalid > 1 ? "s" : ""} with invalid times or fields skipped.`,
     );
   }
