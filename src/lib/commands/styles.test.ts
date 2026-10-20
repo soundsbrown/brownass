@@ -68,25 +68,29 @@ describe("style commands", () => {
 describe("linkStylesheet", () => {
   const other = {
     ...houseStyle("other"),
-    styles: { Caption: { ...defaultStyle(), fontName: "Georgia" } },
+    styles: {
+      Caption: { ...defaultStyle(), fontName: "Georgia" },
+      "Section title": { ...defaultStyle(), fontSize: 120 },
+    },
   };
 
-  it("takes the new stylesheet's styles, dropping unused ones from the old", () => {
-    const p = linkStylesheet(other, sheet).apply(project());
+  it("takes exactly the new stylesheet's styles", () => {
+    const p = linkStylesheet(other).apply(project());
     expect(p.stylesheet).toBe("other");
-    // Both old styles are still used by captions, so they stay.
-    expect(Object.keys(p.styles)).toEqual(["Caption", "Subtitle", "Section title"]);
-
-    const unused = { ...project(), items: [] };
-    expect(Object.keys(linkStylesheet(other, sheet).apply(unused).styles)).toEqual(["Caption"]);
+    expect(Object.keys(p.styles)).toEqual(["Caption", "Section title"]);
+    expect(p.styles["Section title"].fontSize).toBe(120);
   });
 
-  it("keeps project-only styles", () => {
-    const p = project();
-    p.styles.Imported = defaultStyle();
-    expect(Object.keys(linkStylesheet(other, sheet).apply({ ...p, items: [] }).styles)).toEqual([
-      "Caption",
-      "Imported",
-    ]);
+  it("keeps same-named styles and moves the rest to the first style", () => {
+    const p = linkStylesheet(other).apply(project());
+    expect(styleOf(p, "a")).toBe("Caption"); // was Subtitle
+    expect(styleOf(p, "b")).toBe("Section title");
+  });
+
+  it("is a single undoable step", () => {
+    const history = new History();
+    const before = project();
+    const after = history.execute(before, linkStylesheet(other));
+    expect(history.undo(after)).toEqual(before);
   });
 });

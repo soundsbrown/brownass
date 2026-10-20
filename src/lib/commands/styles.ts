@@ -1,5 +1,5 @@
 import type { AssStyle, Project } from "$lib/model/project";
-import { applyStylesheet, type Stylesheet } from "$lib/model/stylesheet";
+import { conformToStylesheet, type Stylesheet } from "$lib/model/stylesheet";
 import type { Command } from "./history";
 
 /** Commands for named styles. Changing style properties is `setStyle` in items.ts. */
@@ -63,22 +63,13 @@ export function setItemStyle(id: string, styleName: string): Command {
 }
 
 /**
- * Links the project to `sheet` and takes its styles. Styles from the
- * previous stylesheet that no caption uses are dropped; the project's own
- * styles, and any still in use, are kept.
+ * Switches the project to `sheet`: it takes exactly the stylesheet's styles;
+ * captions keep their style if the stylesheet has one with the same name,
+ * otherwise they switch to its first style.
  */
-export function linkStylesheet(sheet: Stylesheet, previous?: Stylesheet): Command {
+export function linkStylesheet(sheet: Stylesheet): Command {
   return {
     label: "Change stylesheet",
-    apply: (p: Project) => {
-      if (p.stylesheet === sheet.id) return p;
-      const used = new Set(p.items.flatMap((i) => (i.type === "text" ? [i.styleName] : [])));
-      const kept = Object.fromEntries(
-        Object.entries(p.styles).filter(
-          ([name]) => !(previous && name in previous.styles) || used.has(name),
-        ),
-      );
-      return { ...p, stylesheet: sheet.id, styles: applyStylesheet(kept, sheet) };
-    },
+    apply: (p: Project) => (p.stylesheet === sheet.id ? p : conformToStylesheet(p, sheet).project),
   };
 }

@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import { defaultStyle } from "./defaults";
-import { AssStyleSchema, StyleNameSchema, type AssStyle } from "./project";
+import { AssStyleSchema, StyleNameSchema, type AssStyle, type Project } from "./project";
 
 /**
  * A stylesheet ("house style"): named styles shared by every project linked
@@ -12,7 +12,10 @@ export const StylesheetSchema = v.object({
   version: v.literal(STYLESHEET_VERSION),
   id: v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{1,64}$/)),
   name: v.pipe(v.string(), v.minLength(1)),
-  styles: v.record(StyleNameSchema, AssStyleSchema),
+  styles: v.pipe(
+    v.record(StyleNameSchema, AssStyleSchema),
+    v.check((styles) => Object.keys(styles).length > 0, "A stylesheet needs at least one style"),
+  ),
 });
 export type Stylesheet = v.InferOutput<typeof StylesheetSchema>;
 
@@ -52,40 +55,34 @@ export function houseStyle(id: string): Stylesheet {
   };
 }
 
-/**
- * A linked project's styles: the stylesheet's (in its order), plus any of
- * the project's own styles the stylesheet doesn't have (e.g. imported ones).
- */
-export function applyStylesheet(styles: Styles, sheet: Stylesheet): Styles {
-  const extras = Object.entries(styles).filter(([name]) => !(name in sheet.styles));
-  return { ...sheet.styles, ...Object.fromEntries(extras) };
+/** The style captions fall back to: the stylesheet's first. */
+export function firstStyle(sheet: Stylesheet): string {
+  return Object.keys(sheet.styles)[0];
+}
+
+/** Captions whose style `sheet` doesn't have. */
+export function captionsWithoutStyle(project: Project, sheet: Stylesheet): number {
+  return project.items.filter((i) => i.type === "text" && !(i.styleName in sheet.styles)).length;
 }
 
 /**
- * Reflects a change in a linked project's styles (`before` → `after`) in its
- * stylesheet: edits to the stylesheet's styles, styles added since `before`,
- * and removals. Styles that are only the project's (present in `before` but
- * not in the stylesheet) stay out of it. Returns `sheet` itself if nothing
- * changes.
+ * Links a project to `sheet` and gives it exactly the stylesheet's styles.
+ * Captions whose style the stylesheet doesn't have switch to its first style.
+ * Returns the project and how many captions were reassigned.
  */
-export function mirrorStyles(sheet: Stylesheet, before: Styles, after: Styles): Stylesheet {
-  if (before === after) return sheet;
-  const styles: Styles = {};
-  let changed = false;
-  for (const [name, style] of Object.entries(after)) {
-    const inSheet = name in sheet.styles;
-    const added = !(name in before);
-    if (!inSheet && !added) continue;
-    styles[name] = inSheet && style === before[name] ? sheet.styles[name] : style;
-    if (styles[name] !== sheet.styles[name]) changed = true;
-  }
-  for (const name of Object.keys(sheet.styles)) {
-    if (name in styles) continue;
-    if (name in before && !(name in after)) {
-      changed = true; // Deleted (or renamed) in the project.
-    } else {
-      styles[name] = sheet.styles[name];
-    }
-  }
-  return changed ? { ...sheet, styles } : sheet;
+export function conformToStylesheet(
+  project: Project,
+  sheet: Stylesheet,
+): { project: Project; reassigned: number } {
+  const fallback = firstStyle(sheet);
+  let reassigned = 0;
+  const items = project.items.map((i) => {
+    if (i.type !== "text" || i.styleName in sheet.styles) return i;
+    reassigned++;
+    return { ...i, styleName: fallback };
+  });
+  return {
+    project: { ...project, stylesheet: sheet.id, styles: { ...sheet.styles }, items },
+    reassigned,
+  };
 }
