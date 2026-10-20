@@ -9,6 +9,8 @@
   import { session } from "$lib/session.svelte";
   import Timeline from "$lib/timeline/Timeline.svelte";
   import TextField from "$lib/editor/TextField.svelte";
+  import ExportDialog from "$lib/export/ExportDialog.svelte";
+  import { exporter } from "$lib/export/exporter.svelte";
   import { deleteItem, duplicateItem, setItemSpan } from "$lib/commands/items";
   import { selection } from "$lib/selection.svelte";
 
@@ -34,19 +36,21 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (isTyping(e.target)) return;
+    if (isTyping(e.target) || exporter.dialogOpen) return;
     if (e.ctrlKey && !e.altKey && !e.metaKey) {
       const key = e.key.toLowerCase();
       const action =
         key === "o"
           ? () => session.open()
-          : key === "y" || (key === "z" && e.shiftKey)
-            ? () => projectStore.redo()
-            : key === "z"
-              ? () => projectStore.undo()
-              : key === "d"
-                ? duplicateSelected
-                : null;
+          : key === "e"
+            ? () => player.video && (exporter.dialogOpen = true)
+            : key === "y" || (key === "z" && e.shiftKey)
+              ? () => projectStore.redo()
+              : key === "z"
+                ? () => projectStore.undo()
+                : key === "d"
+                  ? duplicateSelected
+                  : null;
       if (action) {
         e.preventDefault();
         action();
@@ -116,6 +120,10 @@
 </script>
 
 <svelte:window onkeydown={onKeydown} />
+
+{#if exporter.dialogOpen}
+  <ExportDialog onClose={() => (exporter.dialogOpen = false)} />
+{/if}
 
 <div class="app">
   <section class="region video" aria-label="Video preview">

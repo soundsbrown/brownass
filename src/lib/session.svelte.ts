@@ -7,6 +7,7 @@ import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
 import { conformToStylesheet, firstStyle } from "$lib/model/stylesheet";
 import { stylesheets } from "$lib/stylesheets.svelte";
+import { exporter } from "$lib/export/exporter.svelte";
 import type { Project, VideoRef } from "$lib/model/project";
 import { openVideo, type VideoInfo } from "$lib/player/api";
 import { player } from "$lib/player/player.svelte";
@@ -103,9 +104,15 @@ class Session {
     void this.flush();
   }
 
-  /** Saves before the window closes. Returns a cleanup function. */
+  /**
+   * Before the window closes: stops a running export (so no partial file is
+   * left) and saves. Returns a cleanup function.
+   */
   init(): () => void {
-    const unlisten = getCurrentWindow().onCloseRequested(() => this.flush());
+    const unlisten = getCurrentWindow().onCloseRequested(async () => {
+      await exporter.cancelRunning();
+      await this.flush();
+    });
     return () => void unlisten.then((fn) => fn());
   }
 

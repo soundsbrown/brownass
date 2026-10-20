@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatTime } from "$lib/time";
+  import { exporter } from "$lib/export/exporter.svelte";
   import { session } from "$lib/session.svelte";
   import { player } from "./player.svelte";
 
@@ -10,7 +11,15 @@
 </script>
 
 <div class="transport">
-  <button onpointerdown={keepFocus} onclick={() => session.open()}>Open video…</button>
+  <div class="file">
+    <button onpointerdown={keepFocus} onclick={() => session.open()}>Open video…</button>
+    <button
+      onpointerdown={keepFocus}
+      onclick={() => (exporter.dialogOpen = true)}
+      {disabled}
+      title="Export (Ctrl+E)">Export…</button
+    >
+  </div>
 
   <div class="buttons">
     <button
@@ -87,6 +96,11 @@
     padding: 6px 10px;
     background: var(--panel);
     border-top: 1px solid var(--border);
+  }
+
+  .file {
+    display: flex;
+    gap: 4px;
   }
 
   .buttons {
