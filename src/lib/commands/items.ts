@@ -47,6 +47,19 @@ export function addItem(item: Item): Command {
   };
 }
 
+/** Copies an item to just after itself, as `newId`. */
+export function duplicateItem(id: string, newId: string): Command {
+  return {
+    label: "Duplicate subtitle",
+    apply: (p) => {
+      const item = p.items.find((i) => i.id === id);
+      if (!item) return p;
+      const length = item.end - item.start;
+      return addItem({ ...item, id: newId, start: item.end, end: item.end + length }).apply(p);
+    },
+  };
+}
+
 export function deleteItem(id: string): Command {
   return {
     label: "Delete subtitle",

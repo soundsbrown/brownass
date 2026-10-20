@@ -8,13 +8,29 @@ export interface Command {
   label: string;
   apply(project: Project): Project;
   /**
-   * Consecutive commands with the same key, each within MERGE_WINDOW_MS of
-   * the previous one, form a single undo step (typing, dragging).
+   * Consecutive commands with the same key, each within `mergeWindowMs`
+   * (default MERGE_WINDOW_MS) of the previous one, form a single undo step.
    */
   mergeKey?: string;
+  mergeWindowMs?: number;
 }
 
 export const MERGE_WINDOW_MS = 1000;
+
+let gestureCount = 0;
+
+/** A unique merge key for one drag gesture. */
+export function newGestureKey(): string {
+  return `gesture:${++gestureCount}`;
+}
+
+/**
+ * Marks a command as part of a drag gesture: everything with the same key
+ * forms one undo step, however long the user pauses mid-drag.
+ */
+export function inGesture(command: Command, key: string): Command {
+  return { ...command, mergeKey: key, mergeWindowMs: Infinity };
+}
 
 interface Entry {
   label: string;
@@ -54,7 +70,7 @@ export class History {
     const merges =
       command.mergeKey !== undefined &&
       top?.mergeKey === command.mergeKey &&
-      now - top.time < MERGE_WINDOW_MS;
+      now - top.time < (command.mergeWindowMs ?? MERGE_WINDOW_MS);
     if (merges) {
       top.time = now;
     } else {

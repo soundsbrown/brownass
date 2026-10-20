@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createProject } from "$lib/model/defaults";
 import type { Project, TextItem } from "$lib/model/project";
-import { History, MERGE_WINDOW_MS, type Command } from "./history";
+import { History, MERGE_WINDOW_MS, inGesture, newGestureKey, type Command } from "./history";
 import {
   addItem,
   clampSpan,
   deleteItem,
+  duplicateItem,
   editText,
   moveItem,
   setItemSpan,
@@ -34,6 +35,7 @@ describe("undo/redo", () => {
   const cases: [string, Command, (p: Project) => unknown][] = [
     ["add", addItem(text("b", 1, 2)), (p) => p.items.length],
     ["delete", deleteItem("a"), (p) => p.items.length],
+    ["duplicate", duplicateItem("a", "a2"), (p) => p.items.map((i) => [i.start, i.end])],
     ["move", moveItem("a", 20), (p) => first(p).start],
     ["resize", setItemSpan("a", 9, 15), (p) => [first(p).start, first(p).end]],
     ["edit text", editText("a", "changed"), (p) => first(p).text],
@@ -91,6 +93,16 @@ describe("undo/redo", () => {
     for (const s of [11, 12, 13]) p = history.execute(p, moveItem("a", s, "drag-1"), 0);
     for (const s of [14, 15]) p = history.execute(p, moveItem("a", s, "drag-2"), 0);
     expect(first(history.undo(p)!).start).toBe(13);
+  });
+
+  it("merges a whole gesture even with pauses mid-drag", () => {
+    const history = new History();
+    const key = newGestureKey();
+    let p = withItem();
+    p = history.execute(p, inGesture(moveItem("a", 11), key), 0);
+    p = history.execute(p, inGesture(moveItem("a", 12), key), 5 * MERGE_WINDOW_MS);
+    expect(history.undo(p)).toEqual(withItem());
+    expect(history.canUndo).toBe(false);
   });
 
   it("does not merge typing in different items", () => {
