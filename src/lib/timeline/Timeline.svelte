@@ -232,7 +232,6 @@
       wave: cssVar("--wave"),
       waveBg: cssVar("--wave-bg"),
       error: cssVar("--error"),
-      item: cssVar("--item"),
       itemSelected: cssVar("--item-selected"),
       itemText: cssVar("--item-text"),
     };
@@ -256,6 +255,7 @@
         video: player.video,
         time: player.time,
         items,
+        styleNames: Object.keys(projectStore.project?.styles ?? {}),
         layout,
         selectedId: selection.item?.id ?? null,
         ghost:

@@ -10,6 +10,7 @@
   } from "$lib/model/stylesheet";
   import { selection } from "$lib/selection.svelte";
   import { stylesheets } from "$lib/stylesheets.svelte";
+  import { styleColor } from "$lib/timeline/styleColors";
   import StyleEditor from "./StyleEditor.svelte";
 
   interface Props {
@@ -185,7 +186,9 @@
               class:active={name === shown}
               onpointerdown={keepFocus}
               onclick={() => (editing = name)}
-              ondblclick={() => (renamingStyle = name)}>{name}</button
+              ondblclick={() => (renamingStyle = name)}
+              ><span class="swatch" style:background={styleColor(styleNames, name).fill}
+              ></span>{name}</button
             >
           {/if}
         </li>
@@ -312,6 +315,15 @@
 
   .style-list input {
     width: 100%;
+  }
+
+  .swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 8px;
+    border-radius: 2px;
+    vertical-align: -1px;
   }
 
   .style {

@@ -168,7 +168,6 @@
     --ruler: #2a2d33;
     --track: #232529;
     --lane: #1f2125;
-    --item: #355f91;
     --item-selected: #4f86c6;
     --item-text: #e9eff7;
     --grid: rgba(255, 255, 255, 0.05);

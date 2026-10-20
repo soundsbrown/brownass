@@ -2,6 +2,7 @@ import type { Item } from "$lib/model/project";
 import type { VideoInfo } from "$lib/player/api";
 import { formatTime, type Seconds } from "$lib/time";
 import type { Span } from "./drag";
+import { styleColor } from "./styleColors";
 import { RULER_HEIGHT, previewText, rowTop, type Geometry, type RowLayout } from "./tracks";
 import { pickTicks, timeAt, xAt, type View } from "./view";
 import { PEAK_TO_HEIGHT, peakBetween, type Waveform } from "./waveform";
@@ -22,7 +23,6 @@ export interface Colors {
   wave: string;
   waveBg: string;
   error: string;
-  item: string;
   itemSelected: string;
   itemText: string;
 }
@@ -36,6 +36,8 @@ export interface Scene {
   video: VideoInfo | null;
   time: Seconds;
   items: readonly Item[];
+  /** Style names in stylesheet order; a caption's colour comes from its style's position. */
+  styleNames: readonly string[];
   layout: RowLayout;
   selectedId: string | null;
   /** A subtitle being drawn by dragging, and the layer it will go on. */
@@ -190,7 +192,8 @@ function drawBox(
   // A 1 px gap at the end keeps touching subtitles visibly separate.
   const width = Math.max(1, x1 - x0 - 1);
 
-  ctx.fillStyle = selected ? c.itemSelected : c.item;
+  const color = styleColor(s.styleNames, item.type === "text" ? item.styleName : "");
+  ctx.fillStyle = selected ? color.selected : color.fill;
   ctx.fillRect(x0, y, width, h);
   if (selected) {
     ctx.strokeStyle = c.itemText;

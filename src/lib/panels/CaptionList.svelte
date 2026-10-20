@@ -3,9 +3,11 @@
   import { player } from "$lib/player/player.svelte";
   import { chronological, selection } from "$lib/selection.svelte";
   import { formatTime } from "$lib/time";
+  import { styleColor } from "$lib/timeline/styleColors";
   import { previewText } from "$lib/timeline/tracks";
 
   const items = $derived(chronological(projectStore.project?.items ?? []));
+  const styleNames = $derived(Object.keys(projectStore.project?.styles ?? {}));
   let list: HTMLElement;
 
   // Keep the selected caption visible, however it was selected.
@@ -40,6 +42,11 @@
       >
         <span class="index">{n + 1}</span>
         <span class="time">{formatTime(item.start, 2)}</span>
+        <span
+          class="swatch"
+          style:background={styleColor(styleNames, item.type === "text" ? item.styleName : "").fill}
+          title={item.type === "text" ? item.styleName : ""}
+        ></span>
         <span class="text">{item.type === "text" ? previewText(item.text) || "(empty)" : ""}</span>
       </button>
     {:else}
@@ -78,7 +85,8 @@
 
   .row {
     display: grid;
-    grid-template-columns: 2.5em 6.2em 1fr;
+    grid-template-columns: 2.5em 6.2em 10px 1fr;
+    align-items: center;
     gap: 6px;
     width: 100%;
     padding: 3px 6px;
@@ -104,6 +112,12 @@
 
   .time {
     color: var(--muted);
+  }
+
+  .swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
   }
 
   .text {
