@@ -22,6 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@tauri-apps/api": "^2",
+    "jassub": "2.5.18",
     "valibot": "^1.5.0"
   },
   "devDependencies": {

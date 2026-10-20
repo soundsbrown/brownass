@@ -80,6 +80,7 @@
 
 <style>
   .transport {
+    white-space: nowrap;
     display: flex;
     align-items: center;
     gap: 16px;

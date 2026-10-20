@@ -7,6 +7,15 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   plugins: [sveltekit()],
 
+  // JASSUB locates its worker, WASM and default font relative to its own
+  // module (new URL(..., import.meta.url)); pre-bundling would break that.
+  // Its CommonJS dependencies still need pre-bundling to load in dev.
+  optimizeDeps: {
+    exclude: ["jassub"],
+    include: ["jassub > throughput", "jassub > rvfc-polyfill"],
+  },
+  worker: { format: /** @type {const} */ ("es") },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
