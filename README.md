@@ -87,3 +87,7 @@ It then checks that both run and that ffmpeg has the `ass` filter. If anything i
 | `cargo fmt`, `cargo clippy`, `cargo test` | Rust checks (run in `src-tauri/`) |
 
 Tests that run the real ffmpeg are opt-in: set `BROWNASS_TEST_FFMPEG` (path to `ffmpeg.exe`, with `ffprobe.exe` next to it) and `BROWNASS_TEST_VIDEO` (a short video with audio), then run `cargo test -- --ignored` in `src-tauri/`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
