@@ -249,7 +249,7 @@ where
 
 /// A command that doesn't flash a console window on Windows and is killed if
 /// its future is dropped.
-fn command(program: &Path) -> Command {
+pub fn command(program: &Path) -> Command {
     let mut cmd = Command::new(program);
     cmd.stdin(Stdio::null()).kill_on_drop(true);
     #[cfg(windows)]

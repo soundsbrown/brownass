@@ -2,6 +2,7 @@
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State, WebviewWindow};
@@ -27,6 +28,21 @@ pub struct VideoInfo {
     pub audio_codec: Option<String>,
 }
 
+/// The video opened via the dialog. Commands that work on "the video" use
+/// this rather than accepting a path from the frontend.
+#[derive(Default)]
+pub struct OpenedVideo(Mutex<Option<VideoInfo>>);
+
+impl OpenedVideo {
+    pub fn get(&self) -> Option<VideoInfo> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn set(&self, info: VideoInfo) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(info);
+    }
+}
+
 /// Asks the user for a video, probes it and grants the webview read access to
 /// that one file. `Ok(None)` means the dialog was cancelled.
 #[tauri::command]
@@ -34,6 +50,7 @@ pub async fn open_video(
     app: AppHandle,
     window: WebviewWindow,
     ffmpeg: State<'_, FfmpegState>,
+    opened: State<'_, OpenedVideo>,
 ) -> Result<Option<VideoInfo>, String> {
     let paths = ffmpeg.paths()?;
     let dialog = app
@@ -53,6 +70,7 @@ pub async fn open_video(
     if let Some(name) = path.file_name() {
         let _ = window.set_title(&format!("{} — BrownASS", name.to_string_lossy()));
     }
+    opened.set(info.clone());
     Ok(Some(info))
 }
 
