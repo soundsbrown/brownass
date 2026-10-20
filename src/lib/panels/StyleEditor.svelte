@@ -16,6 +16,13 @@
   const style = $derived(projectStore.project?.styles[name]);
 
   let families = $state<string[]>([]);
+  // The installed family matching the style's font, compared ignoring case
+  // (libass matches names that way too).
+  const fontFamily = $derived(
+    style && families.find((f) => f.toLowerCase() === style.fontName.toLowerCase()),
+  );
+  // Until the list has loaded, don't claim the font is missing.
+  const installed = $derived(families.length === 0 || fontFamily !== undefined);
   $effect(() => {
     invoke<string[]>("font_families").then(
       (list) => (families = list),
@@ -40,19 +47,16 @@
     <h3>Text</h3>
     <div class="fields">
       <label class="label" for="{fontListId}-font">Font</label>
-      <input
+      <select
         id="{fontListId}-font"
-        list={fontListId}
-        value={style.fontName}
-        spellcheck="false"
-        onchange={(e) => {
-          const font = e.currentTarget.value.trim();
-          if (font) change("fontName", font);
-        }}
-      />
-      <datalist id={fontListId}>
-        {#each families as family (family)}<option value={family}></option>{/each}
-      </datalist>
+        value={fontFamily ?? style.fontName}
+        onchange={(e) => change("fontName", e.currentTarget.value)}
+      >
+        {#if !installed}
+          <option value={style.fontName}>{style.fontName} (not installed)</option>
+        {/if}
+        {#each families as family (family)}<option value={family}>{family}</option>{/each}
+      </select>
 
       <NumberField
         label="Size"
