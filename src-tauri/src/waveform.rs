@@ -24,6 +24,9 @@ const BINS_PER_SECOND: u32 = SAMPLE_RATE / SAMPLES_PER_BIN as u32;
 
 const CACHE_MAGIC: &[u8; 4] = b"BWPK";
 const CACHE_VERSION: u32 = 1;
+/// The cache keeps the most recently used waveforms within this size (an hour
+/// of video takes about 3.6 MB).
+const MAX_CACHE_BYTES: u64 = 200 * 1024 * 1024;
 
 /// Counts waveform requests; a newer request cancels an older one.
 #[derive(Default)]
@@ -45,6 +48,9 @@ pub async fn waveform(
 
     let cache = cache_file(&app, &info.path);
     if let Some(payload) = cache.as_deref().and_then(read_cache) {
+        if let Some(path) = &cache {
+            touch(path);
+        }
         return Ok(Response::new(payload));
     }
 
@@ -54,7 +60,12 @@ pub async fn waveform(
     let payload = encode(&bins);
     if let Some(path) = cache {
         // A failed cache write only costs a re-extraction next time.
-        let _ = write_cache(&path, &payload);
+        if write_cache(&path, &payload).is_ok()
+            && let Some(dir) = path.parent()
+            && let Err(e) = prune_cache(dir, MAX_CACHE_BYTES, &path)
+        {
+            log::warn!("Could not prune the waveform cache: {e}");
+        }
     }
     Ok(Response::new(payload))
 }
@@ -208,6 +219,40 @@ fn read_cache(path: &Path) -> Option<Vec<u8>> {
     (u32::from_le_bytes(*version) == CACHE_VERSION && payload.len() >= 4).then(|| payload.to_vec())
 }
 
+/// Marks a cache entry as recently used (its modification time is the
+/// "last used" time for pruning).
+fn touch(path: &Path) {
+    if let Ok(file) = fs::File::options().write(true).open(path) {
+        let _ = file.set_modified(std::time::SystemTime::now());
+    }
+}
+
+/// Deletes the least recently used cache entries until the cache fits in
+/// `max_bytes`, never deleting `keep` (the entry just written).
+fn prune_cache(dir: &Path, max_bytes: u64, keep: &Path) -> std::io::Result<()> {
+    let mut entries: Vec<(std::time::SystemTime, u64, PathBuf)> = fs::read_dir(dir)?
+        .filter_map(|e| {
+            let path = e.ok()?.path();
+            if path.extension()? != "peaks" {
+                return None;
+            }
+            let meta = fs::metadata(&path).ok()?;
+            Some((meta.modified().ok()?, meta.len(), path))
+        })
+        .collect();
+    let mut total: u64 = entries.iter().map(|(_, len, _)| len).sum();
+    entries.sort_by_key(|(used, _, _)| *used);
+    for (_, len, path) in entries {
+        if total <= max_bytes {
+            break;
+        }
+        if path != keep && fs::remove_file(&path).is_ok() {
+            total -= len;
+        }
+    }
+    Ok(())
+}
+
 fn write_cache(path: &Path, payload: &[u8]) -> std::io::Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
@@ -265,6 +310,46 @@ mod tests {
         assert_eq!(scale(64), 0);
         assert_eq!(scale(65), 1);
         assert_eq!(scale(32_768), 255);
+    }
+
+    #[test]
+    fn prunes_least_recently_used_entries_to_the_limit() {
+        use std::time::{Duration, SystemTime};
+        let dir = tempfile::tempdir().unwrap();
+        let entry = |name: &str, age_secs: u64| {
+            let path = dir.path().join(name);
+            fs::write(&path, vec![0u8; 100]).unwrap();
+            let file = fs::File::options().write(true).open(&path).unwrap();
+            file.set_modified(SystemTime::now() - Duration::from_secs(age_secs))
+                .unwrap();
+            path
+        };
+        entry("oldest.peaks", 400);
+        let older = entry("older.peaks", 300);
+        let recent = entry("recent.peaks", 100);
+        let new = entry("new.peaks", 500); // just written, but with an old time
+        fs::write(dir.path().join("other.txt"), vec![0u8; 1000]).unwrap();
+
+        prune_cache(dir.path(), 250, &new).unwrap();
+        let mut left: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        // 400 bytes of entries, limit 250: the two oldest go (not "new").
+        assert_eq!(left, ["new.peaks", "other.txt", "recent.peaks"]);
+
+        // Using an entry makes it recent again.
+        touch(&older);
+        assert!(
+            !older.exists(),
+            "deleted above, touching doesn't recreate it"
+        );
+        touch(&recent);
+        assert!(
+            fs::metadata(&recent).unwrap().modified().unwrap()
+                > SystemTime::now() - Duration::from_secs(5)
+        );
     }
 
     #[test]
