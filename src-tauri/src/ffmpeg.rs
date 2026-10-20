@@ -5,6 +5,7 @@
 //! with fixed argument arrays; the frontend has no shell permissions.
 
 use std::env;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Mutex;
@@ -14,6 +15,7 @@ use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::process::Command;
 
+use crate::dialogs;
 use crate::settings::Settings;
 
 const FFMPEG: &str = "ffmpeg";
@@ -30,6 +32,15 @@ pub struct FfmpegPaths {
 pub struct FfmpegState(Mutex<Option<FfmpegPaths>>);
 
 impl FfmpegState {
+    /// The verified paths, or an error to show if ffmpeg isn't usable yet.
+    pub fn paths(&self) -> Result<FfmpegPaths, String> {
+        self.0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| "ffmpeg is not available. See the status bar.".to_owned())
+    }
+
     fn set(&self, paths: Option<FfmpegPaths>) {
         *self.0.lock().unwrap_or_else(|e| e.into_inner()) = paths;
     }
@@ -67,6 +78,12 @@ impl FfmpegError {
     }
 }
 
+impl std::fmt::Display for FfmpegError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
 /// Finds and verifies ffmpeg, remembering the result for later commands.
 #[tauri::command]
 pub async fn ffmpeg_status(
@@ -93,20 +110,13 @@ pub async fn locate_ffmpeg(
     app: AppHandle,
     state: State<'_, FfmpegState>,
 ) -> Result<Option<FfmpegInfo>, FfmpegError> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
     let mut dialog = app.dialog().file().set_title("Locate ffmpeg");
     if cfg!(windows) {
         dialog = dialog.add_filter("ffmpeg", &["exe"]);
     }
-    dialog.pick_file(move |file| {
-        let _ = tx.send(file);
-    });
-    let Some(file) = rx.await.ok().flatten() else {
+    let Some(ffmpeg) = dialogs::pick_file(dialog).await else {
         return Ok(None);
     };
-    let ffmpeg = file
-        .into_path()
-        .map_err(|e| FfmpegError::new(FfmpegErrorKind::Failed, e.to_string()))?;
 
     let paths = paths_from_ffmpeg(ffmpeg)?;
     let version = verify(&paths).await?;
@@ -211,7 +221,11 @@ async fn verify(paths: &FfmpegPaths) -> Result<String, FfmpegError> {
 }
 
 /// Runs a tool to completion and returns its stdout.
-async fn run(program: &Path, args: &[&str]) -> Result<String, FfmpegError> {
+pub async fn run<I, S>(program: &Path, args: I) -> Result<String, FfmpegError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let failed = |detail: String| {
         FfmpegError::new(
             FfmpegErrorKind::Failed,

@@ -1,5 +1,7 @@
+mod dialogs;
 mod ffmpeg;
 mod settings;
+mod video;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -8,7 +10,8 @@ pub fn run() {
         .manage(ffmpeg::FfmpegState::default())
         .invoke_handler(tauri::generate_handler![
             ffmpeg::ffmpeg_status,
-            ffmpeg::locate_ffmpeg
+            ffmpeg::locate_ffmpeg,
+            video::open_video
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
