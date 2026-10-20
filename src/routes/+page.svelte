@@ -1,23 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { invoke, isTauri } from "@tauri-apps/api/core";
-
-  let ffmpegStatus = $state("Checking ffmpeg…");
-  let ffmpegOk = $state<boolean | null>(null);
-
-  onMount(async () => {
-    if (!isTauri()) {
-      ffmpegStatus = "Not running inside Tauri";
-      return;
-    }
-    try {
-      ffmpegStatus = await invoke<string>("ffmpeg_version");
-      ffmpegOk = true;
-    } catch (e) {
-      ffmpegStatus = String(e);
-      ffmpegOk = false;
-    }
-  });
+  import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
 </script>
 
 <div class="app">
@@ -37,8 +19,8 @@
     <span class="placeholder">Properties</span>
   </aside>
 
-  <footer class="status" class:ok={ffmpegOk === true} class:error={ffmpegOk === false}>
-    {ffmpegStatus}
+  <footer class="status">
+    <FfmpegStatus />
   </footer>
 </div>
 
@@ -111,14 +93,6 @@
     font-size: 12px;
     color: var(--muted);
     background: var(--bg);
-    white-space: nowrap;
     overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .status.ok {
-    color: var(--ok);
-  }
-  .status.error {
-    color: var(--error);
   }
 </style>

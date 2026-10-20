@@ -9,27 +9,29 @@ A lightweight desktop editor for authoring ASS subtitles on top of a video, buil
 - Windows: Visual Studio C++ build tools and WebView2 (preinstalled on Windows 11)
 - See also the [Tauri prerequisites](https://tauri.app/start/prerequisites/)
 
+Windows is currently the only supported platform.
+
 ## Setup
 
 ```sh
 npm install
-npm run setup:ffmpeg   # installs ffmpeg + ffprobe sidecars into src-tauri/binaries/
 npm run tauri dev
 ```
 
-### ffmpeg sidecars
+### ffmpeg
 
-The app bundles `ffmpeg` and `ffprobe` as Tauri sidecars. The ffmpeg build **must include libass** (`--enable-libass`), because burn-in export uses the `ass` filter. `scripts/setup-ffmpeg.mjs` verifies this.
+BrownASS does not bundle ffmpeg; install it separately. The build **must include libass** (`--enable-libass`), because subtitle rendering uses the `ass` filter. The easiest option on Windows:
 
-The setup script gets the binaries from one of these sources, in order:
+```sh
+winget install Gyan.FFmpeg
+```
 
-1. `FFMPEG_DIR`: a directory containing `ffmpeg` and `ffprobe` (e.g. `FFMPEG_DIR=C:\tools\ffmpeg\bin npm run setup:ffmpeg`)
-2. On Windows: downloads the [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) release essentials build
-3. `ffmpeg` / `ffprobe` on `PATH`
+At startup the app looks for `ffmpeg` and `ffprobe`:
 
-Pass `-- --force` to replace binaries that are already installed.
+1. at the path chosen with **Locate ffmpeg…** in the status bar (saved in the app's settings; `ffprobe` must be in the same folder);
+2. otherwise on `PATH`, preferring a folder that contains both tools.
 
-**Licensing:** the gyan.dev builds are GPL (they include x264). Which ffmpeg build to ship, and the resulting license obligations, has not been decided yet.
+It then checks that both run and that ffmpeg has the `ass` filter. If anything is missing, the status bar says what and offers **Locate ffmpeg…** and **Check again**.
 
 ## Scripts
 

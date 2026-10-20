@@ -17,7 +17,6 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "setup:ffmpeg": "node scripts/setup-ffmpeg.mjs",
     "tauri": "tauri"
   },
   "license": "MIT",
