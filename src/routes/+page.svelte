@@ -2,6 +2,7 @@
   import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
   import Banner from "$lib/panels/Banner.svelte";
   import { logUncaughtErrors } from "$lib/log";
+  import { recents } from "$lib/recents.svelte";
   import Sidebar from "$lib/panels/Sidebar.svelte";
   import Transport from "$lib/player/Transport.svelte";
   import VideoView from "$lib/player/VideoView.svelte";
@@ -18,6 +19,7 @@
 
   $effect(() => session.init());
   $effect(() => logUncaughtErrors());
+  $effect(() => void recents.refresh());
 
   $effect(() => {
     session.changed(projectStore.revision);

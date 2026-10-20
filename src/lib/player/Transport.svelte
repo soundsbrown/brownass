@@ -1,6 +1,8 @@
 <script lang="ts">
   import { formatTime } from "$lib/time";
   import { exporter } from "$lib/export/exporter.svelte";
+  import { recents } from "$lib/recents.svelte";
+  import RecentList from "./RecentList.svelte";
   import { session } from "$lib/session.svelte";
   import { player } from "./player.svelte";
 
@@ -8,11 +10,39 @@
   // as Space keep working after clicking a button.
   const keepFocus = (e: PointerEvent) => e.preventDefault();
   const disabled = $derived(!player.video);
+
+  let recentOpen = $state(false);
+  let recentMenu: HTMLDivElement;
+  // Close the recent-videos menu on any click outside it.
+  $effect(() => {
+    if (!recentOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!recentMenu.contains(e.target as Node)) recentOpen = false;
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => window.removeEventListener("pointerdown", onPointerDown, true);
+  });
 </script>
 
 <div class="transport">
   <div class="file">
-    <button onpointerdown={keepFocus} onclick={() => session.open()}>Open video…</button>
+    <div class="open-group" bind:this={recentMenu}>
+      <button class="open-main" onpointerdown={keepFocus} onclick={() => session.open()}>
+        Open video…
+      </button>
+      <button
+        class="open-more"
+        onpointerdown={keepFocus}
+        onclick={() => (recentOpen = !recentOpen)}
+        disabled={recents.list.length === 0}
+        aria-label="Recent videos"
+        aria-expanded={recentOpen}
+        title="Recent videos">▾</button
+      >
+      {#if recentOpen}
+        <div class="recent-menu"><RecentList onChoose={() => (recentOpen = false)} /></div>
+      {/if}
+    </div>
     <button
       onpointerdown={keepFocus}
       onclick={() => (exporter.dialogOpen = true)}
@@ -101,6 +131,37 @@
   .file {
     display: flex;
     gap: 4px;
+  }
+
+  .open-group {
+    position: relative;
+    display: flex;
+  }
+
+  .open-main {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .open-more {
+    padding: 3px 6px;
+    border-left: none;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .recent-menu {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    z-index: 5;
+    width: 360px;
+    padding: 4px;
+    white-space: normal;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   }
 
   .buttons {

@@ -9,8 +9,9 @@ use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::dialogs;
-use crate::ffmpeg::{self, FfmpegState};
+use crate::ffmpeg::{self, FfmpegPaths, FfmpegState};
 use crate::project_files::ProjectFiles;
+use crate::settings::Settings;
 
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "m4v", "mov", "mkv", "webm", "avi", "wmv", "mpg", "mpeg", "ts", "m2ts", "mts",
@@ -64,7 +65,68 @@ pub async fn open_video(
     let Some(path) = dialogs::pick_file(dialog).await else {
         return Ok(None);
     };
+    open(&app, &window, &paths, &opened, &project, path)
+        .await
+        .map(Some)
+}
 
+/// Reopens a video from the recent list. Only paths on that list are
+/// accepted, so the frontend can't make the app open arbitrary files.
+#[tauri::command]
+pub async fn open_recent(
+    app: AppHandle,
+    window: WebviewWindow,
+    ffmpeg: State<'_, FfmpegState>,
+    opened: State<'_, OpenedVideo>,
+    project: State<'_, ProjectFiles>,
+    path: PathBuf,
+) -> Result<VideoInfo, String> {
+    if !Settings::load(&app).is_recent(&path) {
+        return Err("That video isn't in the recent list.".into());
+    }
+    if !path.is_file() {
+        return Err(format!("{} no longer exists.", path.display()));
+    }
+    let paths = ffmpeg.paths()?;
+    open(&app, &window, &paths, &opened, &project, path).await
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentVideo {
+    path: PathBuf,
+    exists: bool,
+}
+
+#[tauri::command]
+pub async fn recent_videos(app: AppHandle) -> Vec<RecentVideo> {
+    Settings::load(&app)
+        .recent_videos
+        .into_iter()
+        .map(|path| RecentVideo {
+            exists: path.is_file(),
+            path,
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub async fn forget_recent(app: AppHandle, path: PathBuf) -> Result<(), String> {
+    let mut settings = Settings::load(&app);
+    settings.recent_videos.retain(|p| p != &path);
+    settings.save(&app)
+}
+
+/// Probes `path`, grants the webview read access to it, and makes it the
+/// opened video.
+async fn open(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    paths: &FfmpegPaths,
+    opened: &OpenedVideo,
+    project: &ProjectFiles,
+    path: PathBuf,
+) -> Result<VideoInfo, String> {
     let info = probe(&paths.ffprobe, &path).await.inspect_err(|e| {
         log::warn!("Could not open {}: {e}", path.display());
     })?;
@@ -87,7 +149,12 @@ pub async fn open_video(
     opened.set(info.clone());
     // Until load_project runs for this video, nothing may be saved.
     project.clear();
-    Ok(Some(info))
+    let mut settings = Settings::load(app);
+    settings.add_recent(&path);
+    if let Err(e) = settings.save(app) {
+        log::warn!("Could not update recent videos: {e}");
+    }
+    Ok(info)
 }
 
 async fn probe(ffprobe: &Path, video: &Path) -> Result<VideoInfo, String> {

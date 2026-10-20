@@ -9,7 +9,11 @@
   let menu: HTMLDivElement;
 
   $effect(() => {
-    if (isTauri()) getVersion().then((v) => (version = v));
+    if (isTauri())
+      getVersion().then(
+        (v) => (version = v),
+        () => {},
+      );
   });
 
   // Close the menu on any click outside it.

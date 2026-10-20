@@ -16,3 +16,13 @@ export interface VideoInfo {
 export function openVideo(): Promise<VideoInfo | null> {
   return invoke<VideoInfo | null>("open_video");
 }
+
+/** Reopens a video from the recent list (the backend checks it's on it). */
+export function openRecent(path: string): Promise<VideoInfo> {
+  return invoke<VideoInfo>("open_recent", { path });
+}
+
+export interface RecentVideo {
+  path: string;
+  exists: boolean;
+}

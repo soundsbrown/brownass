@@ -3,7 +3,9 @@
   import { projectStore } from "$lib/commands/store.svelte";
   import { fontsUsed } from "$lib/render/fonts";
   import { preview } from "$lib/render/preview.svelte";
+  import { recents } from "$lib/recents.svelte";
   import { session } from "$lib/session.svelte";
+  import RecentList from "./RecentList.svelte";
   import { player } from "./player.svelte";
 
   // The preview renders exactly what gets exported.
@@ -33,6 +35,12 @@
     <div class="empty">
       <button onclick={() => session.open()}>Open video…</button>
       <span class="shortcut">Ctrl+O</span>
+      {#if recents.list.length > 0}
+        <div class="recents">
+          <h3>Recent videos</h3>
+          <RecentList />
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -75,6 +83,24 @@
     flex-direction: column;
     align-items: center;
     gap: 6px;
+  }
+
+  .recents {
+    width: min(420px, 80vw);
+    margin-top: 18px;
+    padding: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
+  .recents h3 {
+    margin: 2px 10px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
   }
 
   .shortcut {

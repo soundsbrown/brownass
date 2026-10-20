@@ -265,9 +265,21 @@ describe("session", () => {
     addSubtitle();
     await openWith({ kind: "none" });
     expect(saves()).toHaveLength(1);
-    const first = backend.calls.findIndex((c) => c.cmd === "save_project");
-    const secondLoad = backend.calls.findLastIndex((c) => c.cmd === "load_project");
-    expect(first).toBeLessThan(secondLoad);
+    // Before opening: the backend forgets the old project's files as soon as
+    // a new video is opened, so a later save would fail.
+    const save = backend.calls.findIndex((c) => c.cmd === "save_project");
+    const secondOpen = backend.calls.findLastIndex((c) => c.cmd === "open_video");
+    expect(save).toBeLessThan(secondOpen);
+  });
+
+  it("reopens recent videos through the backend's list", async () => {
+    backend.responses.open_recent = video;
+    backend.responses.load_project = { kind: "none" };
+    await session.openRecent("C:\\v\\clip.mp4");
+    expect(backend.calls.find((c) => c.cmd === "open_recent")?.args).toEqual({
+      path: "C:\\v\\clip.mp4",
+    });
+    expect(projectStore.project?.video.path).toBe(video.path);
   });
 
   it("reports save errors", async () => {

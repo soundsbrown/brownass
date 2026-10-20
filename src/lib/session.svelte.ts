@@ -10,7 +10,8 @@ import { stylesheets } from "$lib/stylesheets.svelte";
 import { log } from "$lib/log";
 import { exporter } from "$lib/export/exporter.svelte";
 import type { Project, VideoRef } from "$lib/model/project";
-import { openVideo, type VideoInfo } from "$lib/player/api";
+import { openRecent, openVideo, type VideoInfo } from "$lib/player/api";
+import { recents } from "$lib/recents.svelte";
 import { player } from "$lib/player/player.svelte";
 
 /** Wait this long after the last edit before autosaving. */
@@ -61,15 +62,28 @@ class Session {
 
   /** Shows the open dialog; saves the current project before switching. */
   async open(): Promise<void> {
+    await this.#openWith(openVideo);
+  }
+
+  /** Reopens a video from the recent list. */
+  async openRecent(path: string): Promise<void> {
+    await this.#openWith(() => openRecent(path));
+  }
+
+  async #openWith(open: () => Promise<VideoInfo | null>): Promise<void> {
+    // Save first: opening switches the backend to the new video's files, after
+    // which the current project can no longer be saved.
+    await this.flush();
     let info: VideoInfo | null;
     try {
-      info = await openVideo();
+      info = await open();
     } catch (e) {
       player.error = String(e);
       return;
+    } finally {
+      void recents.refresh();
     }
     if (!info) return;
-    await this.flush();
     // Pick up stylesheets added to (or changed in) the folder meanwhile.
     await stylesheets.refresh();
     player.load(info);

@@ -127,6 +127,7 @@ pub async fn locate_ffmpeg(
     let version = verify(&paths).await?;
     Settings {
         ffmpeg_path: Some(paths.ffmpeg.clone()),
+        ..Settings::load(&app)
     }
     .save(&app)
     .map_err(|e| FfmpegError::new(FfmpegErrorKind::Failed, e))?;
