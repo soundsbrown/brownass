@@ -31,13 +31,27 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Tom Nuydens",
+    "copyright": "© 2026 Tom Nuydens",
+    "category": "Video",
+    "shortDescription": "Subtitle editor for ASS subtitles",
+    "longDescription": "Create and style ASS subtitles on a video's timeline with a live preview, and burn them in with ffmpeg.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      }
+    }
   }
 }
