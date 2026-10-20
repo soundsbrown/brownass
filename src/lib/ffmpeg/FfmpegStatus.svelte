@@ -80,20 +80,5 @@
   button {
     flex: none;
     padding: 1px 8px;
-    font: inherit;
-    color: var(--fg);
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 3px;
-    cursor: pointer;
-  }
-
-  button:hover:not(:disabled) {
-    border-color: var(--muted);
-  }
-
-  button:disabled {
-    cursor: default;
-    opacity: 0.6;
   }
 </style>

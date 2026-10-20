@@ -1,14 +1,62 @@
 <script lang="ts">
   import FfmpegStatus from "$lib/ffmpeg/FfmpegStatus.svelte";
+  import VideoInfoPanel from "$lib/panels/VideoInfoPanel.svelte";
+  import Transport from "$lib/player/Transport.svelte";
+  import VideoView from "$lib/player/VideoView.svelte";
+  import { player } from "$lib/player/player.svelte";
+  import Timeline from "$lib/timeline/Timeline.svelte";
+
+  function isTyping(target: EventTarget | null): boolean {
+    return (
+      target instanceof HTMLElement &&
+      (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+    );
+  }
+
+  function onKeydown(e: KeyboardEvent) {
+    if (isTyping(e.target)) return;
+    if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "o") {
+      e.preventDefault();
+      player.open();
+      return;
+    }
+    if (!player.video || e.ctrlKey || e.altKey || e.metaKey) return;
+
+    // Shift+arrow steps one second instead of one frame.
+    const stride = e.shiftKey ? Math.round(player.fps) : 1;
+    switch (e.key) {
+      case " ":
+        player.togglePlay();
+        break;
+      case "ArrowLeft":
+        player.step(-stride);
+        break;
+      case "ArrowRight":
+        player.step(stride);
+        break;
+      case "Home":
+        player.seekFrame(0);
+        break;
+      case "End":
+        player.seekFrame(player.lastFrame);
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+  }
 </script>
+
+<svelte:window onkeydown={onKeydown} />
 
 <div class="app">
   <section class="region video" aria-label="Video preview">
-    <span class="placeholder">Video preview</span>
+    <VideoView />
+    <Transport />
   </section>
 
   <section class="region timeline" aria-label="Timeline">
-    <span class="placeholder">Timeline</span>
+    <Timeline />
   </section>
 
   <section class="region text" aria-label="Subtitle text">
@@ -16,7 +64,7 @@
   </section>
 
   <aside class="region properties" aria-label="Properties">
-    <span class="placeholder">Properties</span>
+    <VideoInfoPanel />
   </aside>
 
   <footer class="status">
@@ -33,6 +81,10 @@
     --muted: #7d8590;
     --ok: #6cc28a;
     --error: #e5756b;
+    --ruler: #2a2d33;
+    --lane: #1f2125;
+    --grid: rgba(255, 255, 255, 0.05);
+    --playhead: #d4d7dc;
     color-scheme: dark;
     font-family: system-ui, sans-serif;
     font-size: 14px;
@@ -46,10 +98,29 @@
     overflow: hidden;
   }
 
+  :global(button) {
+    padding: 3px 10px;
+    font: inherit;
+    color: var(--fg);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  :global(button:hover:not(:disabled)) {
+    border-color: var(--muted);
+  }
+
+  :global(button:disabled) {
+    cursor: default;
+    opacity: 0.45;
+  }
+
   .app {
     display: grid;
     grid-template-columns: 1fr 300px;
-    grid-template-rows: 1fr 200px 90px auto;
+    grid-template-rows: 1fr 180px 90px auto;
     grid-template-areas:
       "video properties"
       "timeline properties"
@@ -71,7 +142,8 @@
 
   .video {
     grid-area: video;
-    background: #000;
+    flex-direction: column;
+    align-items: stretch;
   }
   .timeline {
     grid-area: timeline;
@@ -81,6 +153,11 @@
   }
   .properties {
     grid-area: properties;
+    align-items: flex-start;
+    justify-content: stretch;
+  }
+  .properties > :global(*) {
+    flex: 1;
   }
 
   .placeholder {
