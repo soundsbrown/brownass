@@ -35,6 +35,30 @@ export function formatTime(t: Seconds, decimals = 3): string {
   return decimals > 0 ? `${base}.${pad(units % scale, decimals)}` : base;
 }
 
+/**
+ * Formats an ASS timestamp, `H:MM:SS.cc`. ASS only has centisecond precision,
+ * so this rounds *down*: for a frame's start time that gives a timestamp after
+ * the previous frame starts and no later than this one, so renderers switch
+ * events on exactly that frame (for frame rates below 100 fps).
+ */
+export function formatAssTime(t: Seconds): string {
+  const cs = Math.floor(Math.max(0, t) * 100 + FRAME_EPSILON);
+  const totalSeconds = Math.floor(cs / 100);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  return `${h}:${pad(m, 2)}:${pad(totalSeconds % 60, 2)}.${pad(cs % 100, 2)}`;
+}
+
+/** Parses an ASS timestamp (`H:MM:SS.cc`); returns `null` if malformed. */
+export function parseAssTime(s: string): Seconds | null {
+  const m = /^\s*(\d+):(\d{1,2}):(\d{1,2})(?:[.,](\d{1,3}))?\s*$/.exec(s);
+  if (!m) return null;
+  const [, h, min, sec, frac = ""] = m;
+  // Fractions are hundredths in ASS, but be lenient about the digit count.
+  const fraction = frac ? Number(frac) / 10 ** frac.length : 0;
+  return Number(h) * 3600 + Number(min) * 60 + Number(sec) + fraction;
+}
+
 function pad(n: number, width: number): string {
   return String(n).padStart(width, "0");
 }
