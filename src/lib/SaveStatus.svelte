@@ -15,7 +15,9 @@
       Leave it
     </button>
   {:else if session.prompt?.kind === "message"}
-    <span class:error={session.prompt.tone === "error"}>{session.prompt.text}</span>
+    <span class:error={session.prompt.tone === "error"} title={session.prompt.details?.join("\n")}
+      >{session.prompt.text}</span
+    >
     <button onpointerdown={keepFocus} onclick={() => (session.prompt = null)} aria-label="Dismiss">
       ×
     </button>

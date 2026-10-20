@@ -114,12 +114,36 @@ describe("session", () => {
     expect(saves()).toEqual([]);
   });
 
-  it("leaves an existing .ass alone when there is no project", async () => {
-    await openWith({ kind: "ass", text: "[Script Info]", path: "C:\\v\\clip.ass" });
-    expect(session.prompt).toMatchObject({ kind: "message", tone: "info" });
-    addSubtitle();
+  it("imports an existing .ass when there is no project", async () => {
+    const ass = [
+      "[Script Info]",
+      "PlayResX: 1280",
+      "PlayResY: 720",
+      "[Events]",
+      "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+      "Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Imported\\Nline",
+      "Comment: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,note",
+    ].join("\n");
+    await openWith({ kind: "ass", text: ass, path: "C:\\v\\clip.ass" });
+    expect(projectStore.project?.items).toMatchObject([{ text: "Imported\nline", start: 1 }]);
+    expect(session.prompt).toMatchObject({
+      kind: "message",
+      text: "Imported clip.ass: 1 subtitle. 1 note (hover).",
+      details: ["1 comment line not kept."],
+    });
+
+    // Editing exports the .ass again; the backend backs up the original.
+    backend.responses.save_project = {
+      projectPath: "C:\\v\\clip.bwass",
+      ass: "written",
+      assBackup: "C:\\v\\clip.ass.bak",
+    };
+    projectStore.execute(editText(projectStore.project!.items[0].id, "edited"));
     await session.flush();
-    expect(saves()[0].ass).toBeNull();
+    expect(saves()[0].ass).toContain(",,edited");
+    expect(session.prompt).toMatchObject({
+      text: "The previous clip.ass was kept as clip.ass.bak.",
+    });
   });
 
   describe("when the .ass was changed outside the app", () => {

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { parseAss } from "$lib/ass/parse";
 import { serializeAss } from "$lib/ass/serialize";
 import { projectStore } from "$lib/commands/store.svelte";
 import { createProject } from "$lib/model/defaults";
@@ -19,13 +20,15 @@ type Loaded =
 interface Saved {
   projectPath: string;
   ass: "written" | "skipped" | "conflict" | "unwritable";
+  assBackup: string | null;
 }
 
 type SaveStatus = "clean" | "pending" | "saving" | "saved" | "error";
 
 /** What a prompt in the status bar asks the user to decide. */
 export type Prompt =
-  { kind: "assConflict"; file: string } | { kind: "message"; text: string; tone: "info" | "error" };
+  | { kind: "assConflict"; file: string }
+  | { kind: "message"; text: string; tone: "info" | "error"; details?: string[] };
 
 /**
  * Ties the opened video to its project files: loads `foo.bwass` (or starts a
@@ -117,15 +120,22 @@ class Session {
           this.savedTo = loaded.path;
           if (loaded.assChanged) this.prompt = { kind: "assConflict", file: this.#assName };
           break;
-        case "ass":
-          // Importing comes next; until then, leave the user's file alone.
-          this.#writeAss = false;
+        case "ass": {
+          const { project: imported, warnings } = parseAss(loaded.text, videoRef(info));
+          project = imported;
+          const count = imported.items.length;
           this.prompt = {
             kind: "message",
             tone: "info",
-            text: `${baseName(loaded.path)} exists but can't be imported yet, so it won't be overwritten.`,
+            text:
+              `Imported ${baseName(loaded.path)}: ${count} subtitle${count === 1 ? "" : "s"}.` +
+              (warnings.length
+                ? ` ${warnings.length} note${warnings.length === 1 ? "" : "s"} (hover).`
+                : ""),
+            details: warnings,
           };
           break;
+        }
         case "none":
           break;
       }
@@ -160,6 +170,12 @@ class Session {
       this.saveError = null;
       if (saved.ass === "conflict") {
         this.prompt = { kind: "assConflict", file: this.#assName };
+      } else if (saved.assBackup) {
+        this.prompt = {
+          kind: "message",
+          tone: "info",
+          text: `The previous ${this.#assName} was kept as ${baseName(saved.assBackup)}.`,
+        };
       }
       // Edits made while saving need another save.
       this.saveStatus = projectStore.revision === revision ? "saved" : "pending";

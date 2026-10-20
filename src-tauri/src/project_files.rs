@@ -85,6 +85,9 @@ pub enum AssOutcome {
 pub struct Saved {
     project_path: PathBuf,
     ass: AssOutcome,
+    /// Where an `.ass` we hadn't written ourselves was copied before being
+    /// overwritten.
+    ass_backup: Option<PathBuf>,
 }
 
 /// File locations and `.ass` bookkeeping for the opened video.
@@ -95,6 +98,9 @@ struct Files {
     /// The `.ass` as we last wrote or read it. If the file on disk differs,
     /// saving reports a conflict instead of overwriting it.
     known_ass: Option<Stamp>,
+    /// The `.ass` as we last wrote it. Overwriting anything else (an imported
+    /// or externally edited file) makes a backup first.
+    own_ass: Option<Stamp>,
 }
 
 impl Files {
@@ -104,6 +110,7 @@ impl Files {
             ass: video.with_extension("ass"),
             fallback,
             known_ass: None,
+            own_ass: None,
         }
     }
 
@@ -116,7 +123,9 @@ impl Files {
         let ass_stamp = stamp(&self.ass);
 
         let Some(project_path) = existing else {
+            // The caller imports it, so it may be replaced, but it isn't ours.
             self.known_ass = ass_stamp;
+            self.own_ass = None;
             return Ok(match ass_stamp {
                 Some(_) => Loaded::Ass {
                     text: read_text(&self.ass)?,
@@ -131,8 +140,10 @@ impl Files {
             (Some(ass), Some(project)) => ass.modified > project.modified + EXTERNAL_CHANGE_SLACK,
             _ => false,
         };
-        // An externally changed .ass isn't "known", so saving asks first.
+        // An .ass no newer than its project is the one we wrote with it. An
+        // externally changed one isn't "known", so saving asks first.
         self.known_ass = if ass_changed { None } else { ass_stamp };
+        self.own_ass = self.known_ass;
         Ok(Loaded::Project {
             json,
             path: project_path,
@@ -141,19 +152,24 @@ impl Files {
     }
 
     fn save(&mut self, json: &str, ass: Option<&str>, overwrite_ass: bool) -> io::Result<Saved> {
+        let current = stamp(&self.ass);
+        let mut ass_backup = None;
         let ass = match ass {
             None => AssOutcome::Skipped,
-            Some(_)
-                if !overwrite_ass
-                    && stamp(&self.ass).is_some_and(|s| Some(s) != self.known_ass) =>
-            {
+            Some(_) if !overwrite_ass && current.is_some_and(|s| Some(s) != self.known_ass) => {
                 AssOutcome::Conflict
             }
             Some(text) => {
+                if current.is_some_and(|s| Some(s) != self.own_ass) {
+                    let backup = free_backup_path(&self.ass);
+                    fs::copy(&self.ass, &backup)?;
+                    ass_backup = Some(backup);
+                }
                 let bytes = [UTF8_BOM, text.as_bytes()].concat();
                 match write_atomic(&self.ass, &bytes) {
                     Ok(()) => {
                         self.known_ass = stamp(&self.ass);
+                        self.own_ass = self.known_ass;
                         AssOutcome::Written
                     }
                     Err(e) if is_unwritable(&e) => AssOutcome::Unwritable,
@@ -176,8 +192,26 @@ impl Files {
             }
             Err(e) => return Err(e),
         };
-        Ok(Saved { project_path, ass })
+        Ok(Saved {
+            project_path,
+            ass,
+            ass_backup,
+        })
     }
+}
+
+/// `foo.ass.bak`, or `foo.ass.bak2`, `foo.ass.bak3`, ... so no earlier backup
+/// is ever replaced.
+fn free_backup_path(path: &Path) -> PathBuf {
+    let with_suffix = |suffix: &str| {
+        let mut name = path.as_os_str().to_owned();
+        name.push(suffix);
+        PathBuf::from(name)
+    };
+    std::iter::once(with_suffix(".bak"))
+        .chain((2..).map(|n| with_suffix(&format!(".bak{n}"))))
+        .find(|p| !p.exists())
+        .expect("an unused backup name exists")
 }
 
 #[tauri::command]
@@ -303,11 +337,11 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
-        // Our own .ass is known, so saving again overwrites it without asking.
-        assert_eq!(
-            reopened.save("{}", Some("x"), false).unwrap().ass,
-            AssOutcome::Written
-        );
+        // Our own .ass is known, so saving again overwrites it without asking
+        // and without a backup.
+        let saved = reopened.save("{}", Some("x"), false).unwrap();
+        assert_eq!(saved.ass, AssOutcome::Written);
+        assert_eq!(saved.ass_backup, None);
     }
 
     #[test]
@@ -326,13 +360,30 @@ mod tests {
         // The project itself is still saved.
         assert!(dir.path().join("my clip.bwass").is_file());
 
+        // Overwriting on request keeps the external version as a backup.
+        let saved = f.save("{}", Some("ours again"), true).unwrap();
+        assert_eq!(saved.ass, AssOutcome::Written);
+        let backup = saved.ass_backup.unwrap();
+        assert_eq!(backup, dir.path().join("my clip.ass.bak"));
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "edited in Aegisub");
+
+        let saved = f.save("{}", Some("and again"), false).unwrap();
+        assert_eq!(saved.ass, AssOutcome::Written);
+        assert_eq!(saved.ass_backup, None);
+    }
+
+    #[test]
+    fn never_replaces_an_earlier_backup() {
+        let (dir, mut f) = setup();
+        let ass = dir.path().join("my clip.ass");
+        fs::write(dir.path().join("my clip.ass.bak"), "oldest").unwrap();
+        fs::write(&ass, "external").unwrap();
+        f.load().unwrap();
+        let backup = f.save("{}", Some("ours"), false).unwrap().ass_backup;
+        assert_eq!(backup, Some(dir.path().join("my clip.ass.bak2")));
         assert_eq!(
-            f.save("{}", Some("ours again"), true).unwrap().ass,
-            AssOutcome::Written
-        );
-        assert_eq!(
-            f.save("{}", Some("and again"), false).unwrap().ass,
-            AssOutcome::Written
+            fs::read_to_string(dir.path().join("my clip.ass.bak")).unwrap(),
+            "oldest"
         );
     }
 
@@ -370,11 +421,12 @@ mod tests {
                 path: ass
             }
         );
-        // Having read it, saving may replace it (the caller imported it).
-        assert_eq!(
-            f.save("{}", Some("x"), false).unwrap().ass,
-            AssOutcome::Written
-        );
+        // Having read it, saving may replace it (the caller imported it), but
+        // the original is kept as a backup.
+        let saved = f.save("{}", Some("x"), false).unwrap();
+        assert_eq!(saved.ass, AssOutcome::Written);
+        let backup = saved.ass_backup.unwrap();
+        assert_eq!(fs::read(backup).unwrap(), b"\xEF\xBB\xBF[Script Info]");
     }
 
     #[test]
