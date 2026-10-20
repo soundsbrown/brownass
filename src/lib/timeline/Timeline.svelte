@@ -14,6 +14,8 @@
     type Extent,
     type View,
   } from "./view";
+  import { PEAK_TO_HEIGHT, peakBetween } from "./waveform";
+  import { waveform } from "./waveform.svelte";
 
   const RULER_HEIGHT = 28;
   const HEAD_WIDTH = 13;
@@ -21,6 +23,7 @@
   const ZOOM_SPEED = 0.002;
   // Wheel deltas in lines (deltaMode 1) instead of pixels.
   const LINE_HEIGHT = 16;
+  const WAVE_PADDING = 4;
 
   let host: HTMLDivElement;
   let canvas: HTMLCanvasElement;
@@ -31,9 +34,13 @@
 
   const extent = $derived<Extent>({ duration: player.duration, width, fps: player.fps });
 
-  // Fit the whole video whenever a new one is loaded.
+  // Fit the whole video and load its waveform whenever a new one is loaded.
   $effect(() => {
-    if (player.video) untrack(() => (view = fitView(extent)));
+    const video = player.video;
+    untrack(() => {
+      if (video) view = fitView(extent);
+      waveform.load(video);
+    });
   });
 
   // Keep the view valid when the timeline is resized.
@@ -98,6 +105,8 @@
     host.releasePointerCapture(e.pointerId);
   }
 
+  // Redraws whenever anything draw() reads changes, including player and
+  // waveform state, since effects track reads made inside called functions.
   $effect(() => {
     draw(canvas, view, width, height, player.time);
   });
@@ -122,6 +131,9 @@
       label: cssVar("--fg"),
       grid: cssVar("--grid"),
       playhead: cssVar("--playhead"),
+      wave: cssVar("--wave"),
+      waveBg: cssVar("--wave-bg"),
+      error: cssVar("--error"),
     };
 
     ctx.fillStyle = colors.ruler;
@@ -134,14 +146,28 @@
     const video = player.video;
     if (!video) return;
 
+    if (video.audioCodec) {
+      // The audio "clip" spans the video's duration, like a track in an NLE.
+      const x0 = Math.max(0, xAt(v, 0));
+      const x1 = Math.min(w, xAt(v, video.duration));
+      ctx.fillStyle = colors.waveBg;
+      ctx.fillRect(x0, RULER_HEIGHT, x1 - x0, h - RULER_HEIGHT);
+    }
+
     drawTicks(ctx, v, w, h, video.fps, colors);
 
-    if (!video.audioCodec) {
-      ctx.fillStyle = colors.tick;
-      ctx.font = "12px system-ui, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("No audio", w / 2, (RULER_HEIGHT + h) / 2);
+    const laneMid = (RULER_HEIGHT + h) / 2;
+    if (waveform.data) {
+      drawWaveform(ctx, v, w, h, video.duration, colors.wave);
+    } else if (waveform.status === "loading") {
+      const pct = Math.round(waveform.progress * 100);
+      laneText(ctx, `Analyzing audio… ${pct}%`, w / 2, laneMid, colors.tick);
+      ctx.fillStyle = colors.wave;
+      ctx.fillRect(0, h - 2, w * waveform.progress, 2);
+    } else if (waveform.status === "error") {
+      laneText(ctx, `Waveform unavailable: ${waveform.error}`, w / 2, laneMid, colors.error);
+    } else if (!video.audioCodec) {
+      laneText(ctx, "No audio", w / 2, laneMid, colors.tick);
     }
 
     drawPlayhead(ctx, Math.round(xAt(v, time)) + 0.5, h, colors.playhead);
@@ -176,6 +202,41 @@
         ctx.fillText(formatTime(i * minor, decimals), x + 4, 4);
       }
     }
+  }
+
+  // One symmetric bar per pixel column, on a dB scale (see PEAK_TO_HEIGHT).
+  function drawWaveform(
+    ctx: CanvasRenderingContext2D,
+    v: View,
+    w: number,
+    h: number,
+    duration: number,
+    color: string,
+  ) {
+    const wf = waveform.data;
+    if (!wf) return;
+    const mid = (RULER_HEIGHT + h) / 2;
+    const maxHalf = (h - RULER_HEIGHT) / 2 - WAVE_PADDING;
+    const xEnd = Math.min(w, Math.ceil(xAt(v, duration)));
+    ctx.fillStyle = color;
+    for (let x = Math.max(0, Math.floor(xAt(v, 0))); x < xEnd; x++) {
+      const half = PEAK_TO_HEIGHT[peakBetween(wf, timeAt(v, x), timeAt(v, x + 1))] * maxHalf;
+      if (half > 0) ctx.fillRect(x, mid - half, 1, Math.max(1, half * 2));
+    }
+  }
+
+  function laneText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    color: string,
+  ) {
+    ctx.fillStyle = color;
+    ctx.font = "12px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y);
   }
 
   // A downward-pointing marker on the ruler, with a line through the lanes.

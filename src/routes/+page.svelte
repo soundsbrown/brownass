@@ -85,6 +85,8 @@
     --lane: #1f2125;
     --grid: rgba(255, 255, 255, 0.05);
     --playhead: #d4d7dc;
+    --wave: #6fcf97;
+    --wave-bg: #1f3a2c;
     color-scheme: dark;
     font-family: system-ui, sans-serif;
     font-size: 14px;
