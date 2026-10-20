@@ -1,5 +1,7 @@
 mod dialogs;
 mod ffmpeg;
+mod hash;
+mod project_files;
 mod settings;
 mod video;
 mod waveform;
@@ -10,11 +12,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ffmpeg::FfmpegState::default())
         .manage(video::OpenedVideo::default())
+        .manage(project_files::ProjectFiles::default())
         .manage(waveform::WaveformJobs::default())
         .invoke_handler(tauri::generate_handler![
             ffmpeg::ffmpeg_status,
             ffmpeg::locate_ffmpeg,
             video::open_video,
+            project_files::load_project,
+            project_files::save_project,
             waveform::waveform
         ])
         .run(tauri::generate_context!())

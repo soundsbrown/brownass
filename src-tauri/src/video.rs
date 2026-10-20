@@ -10,6 +10,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::dialogs;
 use crate::ffmpeg::{self, FfmpegState};
+use crate::project_files::ProjectFiles;
 
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "m4v", "mov", "mkv", "webm", "avi", "wmv", "mpg", "mpeg", "ts", "m2ts", "mts",
@@ -51,6 +52,7 @@ pub async fn open_video(
     window: WebviewWindow,
     ffmpeg: State<'_, FfmpegState>,
     opened: State<'_, OpenedVideo>,
+    project: State<'_, ProjectFiles>,
 ) -> Result<Option<VideoInfo>, String> {
     let paths = ffmpeg.paths()?;
     let dialog = app
@@ -71,6 +73,8 @@ pub async fn open_video(
         let _ = window.set_title(&format!("{} — BrownASS", name.to_string_lossy()));
     }
     opened.set(info.clone());
+    // Until load_project runs for this video, nothing may be saved.
+    project.clear();
     Ok(Some(info))
 }
 

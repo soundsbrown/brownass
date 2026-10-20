@@ -14,6 +14,7 @@ use tauri::{AppHandle, Manager, State};
 use tokio::io::AsyncReadExt;
 
 use crate::ffmpeg::{self, FfmpegState};
+use crate::hash;
 use crate::video::{OpenedVideo, VideoInfo};
 
 const SAMPLE_RATE: u32 = 16_000;
@@ -189,23 +190,13 @@ fn cache_file(app: &AppHandle, video: &Path) -> Option<PathBuf> {
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?
         .as_nanos();
-    let key = fnv1a(&[
+    let key = hash::fnv1a(&[
         video.as_os_str().as_encoded_bytes(),
         &meta.len().to_le_bytes(),
         &mtime.to_le_bytes(),
     ]);
     let dir = app.path().app_cache_dir().ok()?.join("waveforms");
     Some(dir.join(format!("{key:016x}.peaks")))
-}
-
-/// FNV-1a: tiny and, unlike `DefaultHasher`, stable across Rust versions.
-fn fnv1a(parts: &[&[u8]]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in parts.iter().flat_map(|p| p.iter()) {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
 }
 
 fn read_cache(path: &Path) -> Option<Vec<u8>> {
@@ -308,12 +299,5 @@ mod tests {
         let expected = (duration * f64::from(BINS_PER_SECOND)) as usize;
         assert!(bins.len().abs_diff(expected) <= 50, "{} bins", bins.len());
         assert!(bins.iter().any(|&b| b > 0));
-    }
-
-    #[test]
-    fn hash_is_stable() {
-        // Changing this invalidates every user's cache; bump CACHE_VERSION instead.
-        assert_eq!(fnv1a(&[b"a", b"bc"]), fnv1a(&[b"abc"]));
-        assert_eq!(fnv1a(&[b"abc"]), 0xe71f_a219_0541_574b);
     }
 }
