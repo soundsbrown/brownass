@@ -1,6 +1,6 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { frameAt, frameCount, timeOfFrame, type Seconds } from "$lib/time";
-import { openVideo, type VideoInfo } from "./api";
+import type { VideoInfo } from "./api";
 
 // Seeking to exactly a frame's start time can show the previous frame because
 // of rounding in the decoder, so seeks aim slightly inside the frame.
@@ -32,16 +32,6 @@ export class Player {
 
   get lastFrame(): number {
     return frameCount(this.duration, this.fps) - 1;
-  }
-
-  /** Shows the open dialog and loads the chosen video. */
-  async open(): Promise<void> {
-    try {
-      const info = await openVideo();
-      if (info) this.load(info);
-    } catch (e) {
-      this.error = String(e);
-    }
   }
 
   load(info: VideoInfo): void {

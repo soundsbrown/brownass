@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { session } from "$lib/session.svelte";
   import { player } from "./player.svelte";
 </script>
 
@@ -9,7 +10,7 @@
     <video src={player.src} preload="auto" {@attach (el) => player.attach(el)}></video>
   {:else}
     <div class="empty">
-      <button onclick={() => player.open()}>Open video…</button>
+      <button onclick={() => session.open()}>Open video…</button>
       <span class="shortcut">Ctrl+O</span>
     </div>
   {/if}

@@ -4,7 +4,16 @@
   import Transport from "$lib/player/Transport.svelte";
   import VideoView from "$lib/player/VideoView.svelte";
   import { player } from "$lib/player/player.svelte";
+  import SaveStatus from "$lib/SaveStatus.svelte";
+  import { projectStore } from "$lib/commands/store.svelte";
+  import { session } from "$lib/session.svelte";
   import Timeline from "$lib/timeline/Timeline.svelte";
+
+  $effect(() => session.init());
+
+  $effect(() => {
+    session.changed(projectStore.revision);
+  });
 
   function isTyping(target: EventTarget | null): boolean {
     return (
@@ -15,10 +24,21 @@
 
   function onKeydown(e: KeyboardEvent) {
     if (isTyping(e.target)) return;
-    if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === "o") {
-      e.preventDefault();
-      player.open();
-      return;
+    if (e.ctrlKey && !e.altKey && !e.metaKey) {
+      const key = e.key.toLowerCase();
+      const action =
+        key === "o"
+          ? () => session.open()
+          : key === "y" || (key === "z" && e.shiftKey)
+            ? () => projectStore.redo()
+            : key === "z"
+              ? () => projectStore.undo()
+              : null;
+      if (action) {
+        e.preventDefault();
+        action();
+        return;
+      }
     }
     if (!player.video || e.ctrlKey || e.altKey || e.metaKey) return;
 
@@ -69,6 +89,7 @@
 
   <footer class="status">
     <FfmpegStatus />
+    <SaveStatus />
   </footer>
 </div>
 
@@ -81,6 +102,7 @@
     --muted: #7d8590;
     --ok: #6cc28a;
     --error: #e5756b;
+    --warn: #e5c07b;
     --ruler: #2a2d33;
     --lane: #1f2125;
     --grid: rgba(255, 255, 255, 0.05);
@@ -168,6 +190,9 @@
 
   .status {
     grid-area: status;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
     padding: 4px 10px;
     font-size: 12px;
     color: var(--muted);

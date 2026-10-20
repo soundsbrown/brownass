@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatTime } from "$lib/time";
+  import { session } from "$lib/session.svelte";
   import { player } from "./player.svelte";
 
   // Keep focus where it was (usually the document) so keyboard shortcuts such
@@ -9,7 +10,7 @@
 </script>
 
 <div class="transport">
-  <button onpointerdown={keepFocus} onclick={() => player.open()}>Open video…</button>
+  <button onpointerdown={keepFocus} onclick={() => session.open()}>Open video…</button>
 
   <div class="buttons">
     <button
