@@ -138,6 +138,12 @@
         title={replacement ? "" : "The last stylesheet can't be deleted"}
         onclick={() => (confirmDelete = true)}>Delete</button
       >
+      <button
+        class="folder"
+        onpointerdown={keepFocus}
+        title="Documents\BrownASS\Stylesheets: copy .bwstyle files here to share stylesheets"
+        onclick={() => void stylesheets.openFolder()}>Open folder</button
+      >
     </div>
     {#if confirmDelete && sheet && replacement && project}
       {@const affected = captionsWithoutStyle(project, replacement)}
@@ -272,6 +278,10 @@
   .actions button {
     padding: 1px 8px;
     font-size: 12px;
+  }
+
+  .folder {
+    margin-left: auto;
   }
 
   .confirm {

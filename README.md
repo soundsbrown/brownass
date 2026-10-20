@@ -33,6 +33,10 @@ At startup the app looks for `ffmpeg` and `ffprobe`:
 
 It then checks that both run and that ffmpeg has the `ass` filter. If anything is missing, the status bar says what and offers **Locate ffmpeg…** and **Check again**.
 
+## Stylesheets
+
+Caption styles come from stylesheets ("house styles") shared by all videos that use them. They are stored in `Documents\BrownASS\Stylesheets` as `<name>.bwstyle` files; copy one into that folder to use it on another machine. **Edit styles… → Open folder** opens it.
+
 ## Scripts
 
 | Command | Purpose |

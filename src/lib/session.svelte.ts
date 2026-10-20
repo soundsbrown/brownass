@@ -68,6 +68,8 @@ class Session {
     }
     if (!info) return;
     await this.flush();
+    // Pick up stylesheets added to (or changed in) the folder meanwhile.
+    await stylesheets.refresh();
     player.load(info);
     await this.#loadProject(info);
   }

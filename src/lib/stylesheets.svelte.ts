@@ -14,7 +14,7 @@ interface Stored {
   json: string;
 }
 
-/** The app's stylesheets, stored by the backend in the app data folder. */
+/** The app's stylesheets, kept by the backend in Documents\BrownASS\Stylesheets. */
 class Stylesheets {
   list = $state.raw<Stylesheet[]>([]);
   /** Stylesheet files that couldn't be read or saved. */
@@ -27,6 +27,17 @@ class Stylesheets {
   load(): Promise<void> {
     this.#loading ??= this.#load();
     return this.#loading;
+  }
+
+  /** Re-reads the folder, e.g. to pick up stylesheets copied into it. */
+  refresh(): Promise<void> {
+    this.#loading = this.#saving.then(() => this.#load());
+    return this.#loading;
+  }
+
+  /** Shows the stylesheets folder in Explorer. */
+  openFolder(): Promise<void> {
+    return invoke("open_stylesheets_folder");
   }
 
   get(id: string | undefined): Stylesheet | undefined {
@@ -58,7 +69,11 @@ class Stylesheets {
     this.list = index < 0 ? [...this.list, sheet] : this.list.with(index, sheet);
     // Chain saves so an older version never lands after a newer one.
     this.#saving = this.#saving.then(() =>
-      invoke("save_stylesheet", { id: sheet.id, json: serializeStylesheet(sheet) }).then(
+      invoke("save_stylesheet", {
+        id: sheet.id,
+        name: sheet.name,
+        json: serializeStylesheet(sheet),
+      }).then(
         () => undefined,
         (e) => void (this.errors = [...this.errors, String(e)]),
       ),
@@ -74,6 +89,7 @@ class Stylesheets {
 
   async #load(): Promise<void> {
     let stored: Stored[] = [];
+    this.errors = [];
     try {
       stored = await invoke<Stored[]>("list_stylesheets");
     } catch (e) {

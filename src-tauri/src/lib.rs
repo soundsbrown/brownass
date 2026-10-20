@@ -17,6 +17,7 @@ pub fn run() {
         .manage(video::OpenedVideo::default())
         .manage(project_files::ProjectFiles::default())
         .manage(waveform::WaveformJobs::default())
+        .manage(stylesheets::StylesheetFiles::default())
         .invoke_handler(tauri::generate_handler![
             ffmpeg::ffmpeg_status,
             ffmpeg::locate_ffmpeg,
@@ -29,6 +30,7 @@ pub fn run() {
             stylesheets::list_stylesheets,
             stylesheets::save_stylesheet,
             stylesheets::delete_stylesheet,
+            stylesheets::open_stylesheets_folder,
             waveform::waveform
         ])
         .run(tauri::generate_context!())
