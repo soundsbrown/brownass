@@ -40,6 +40,12 @@
     selection.select(id);
   }
 
+  // The webview's own context menu (Back, Save image, Inspect, ...) gives away that this is a
+  // browser. Text fields keep theirs for cut, copy, paste and spelling suggestions.
+  function onContextmenu(e: MouseEvent) {
+    if (!isTyping(e.target)) e.preventDefault();
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (isTyping(e.target) || exporter.dialogOpen) return;
     if (e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -124,7 +130,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} oncontextmenu={onContextmenu} />
 
 {#if exporter.dialogOpen}
   <ExportDialog onClose={() => (exporter.dialogOpen = false)} />
