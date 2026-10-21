@@ -30,6 +30,7 @@
 
   type Gesture =
     | { kind: "scrub" }
+    | { kind: "pan"; lastX: number }
     | { kind: "create"; anchor: number; layer: number; startX: number; span: Span | null }
     | { kind: "move"; id: string; offset: number; key: string }
     | { kind: "resize"; id: string; edge: "start" | "end"; key: string };
@@ -48,7 +49,7 @@
   const geo = $derived(geometry(height, layout.rowLayers.length));
 
   const cursor = $derived.by(() => {
-    if (gesture?.kind === "move") return "grabbing";
+    if (gesture?.kind === "move" || gesture?.kind === "pan") return "grabbing";
     const hit = gesture?.kind === "resize" ? { kind: "item", part: "start" } : hover;
     if (hit?.kind === "item") return hit.part === "body" ? "grab" : "ew-resize";
     if (hit?.kind === "empty" && player.video) return "crosshair";
@@ -74,7 +75,7 @@
   $effect(() => {
     const t = player.time;
     untrack(() => {
-      if (gesture?.kind !== "scrub") view = follow(view, extent, t);
+      if (gesture?.kind !== "scrub" && gesture?.kind !== "pan") view = follow(view, extent, t);
     });
   });
 
@@ -126,6 +127,13 @@
 
   function onPointerDown(e: PointerEvent) {
     const project = projectStore.project;
+    if (e.button === 1 && player.video) {
+      // Middle-drag pans anywhere. Default would start the webview's autoscroll.
+      e.preventDefault();
+      host.setPointerCapture(e.pointerId);
+      gesture = { kind: "pan", lastX: e.clientX };
+      return;
+    }
     if (e.button !== 0 || !player.video || !project) return;
     host.setPointerCapture(e.pointerId);
     const hit = hitAt(e);
@@ -162,6 +170,11 @@
     const project = projectStore.project;
     if (!gesture || !project) {
       hover = player.video ? hitAt(e) : null;
+      return;
+    }
+    if (gesture.kind === "pan") {
+      view = panBy(view, extent, gesture.lastX - e.clientX);
+      gesture = { kind: "pan", lastX: e.clientX };
       return;
     }
     const t = timeAt(view, pointerX(e));
