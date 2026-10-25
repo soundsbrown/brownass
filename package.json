@@ -1,6 +1,6 @@
 {
   "name": "brownass",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "ASS subtitle editor",
   "type": "module",
   "engines": {
@@ -17,7 +17,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "dist": "tauri build && node scripts/dist.mjs"
   },
   "license": "MIT",
   "dependencies": {

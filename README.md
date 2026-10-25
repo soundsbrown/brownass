@@ -41,11 +41,11 @@ Work is saved automatically next to the video: `clip.mp4` gets `clip.bwass` (the
 
 | What | Where |
 |---|---|
-| Project and `.ass` | Next to the video (or `%APPDATA%\com.brownass.app\projects` if that folder is read-only) |
+| Project and `.ass` | Next to the video (or `%APPDATA%\com.soundsbrown.brownass\projects` if that folder is read-only) |
 | Stylesheets | `Documents\BrownASS\Stylesheets\<name>.bwstyle`: copy a file here to share a stylesheet |
-| Settings, recent videos | `%APPDATA%\com.brownass.app` |
-| Log files | `%LOCALAPPDATA%\com.brownass.app\logs` |
-| Waveform cache | `%LOCALAPPDATA%\com.brownass.app` |
+| Settings, recent videos | `%APPDATA%\com.soundsbrown.brownass` |
+| Log files | `%LOCALAPPDATA%\com.soundsbrown.brownass\logs` |
+| Waveform cache | `%LOCALAPPDATA%\com.soundsbrown.brownass` |
 
 The **⋮** menu next to the logo opens the stylesheets and log folders.
 
@@ -79,7 +79,7 @@ It then checks that both run and that ffmpeg has the `ass` filter. If anything i
 | Command | Purpose |
 |---|---|
 | `npm run tauri dev` | Run the app with hot reload |
-| `npm run tauri build` | Build the installer (`src-tauri/target/release/bundle/nsis/`) |
+| `npm run dist` | Build the installer into `dist/` |
 | `npm run lint` | ESLint + Prettier check |
 | `npm run format` | Apply Prettier |
 | `npm run check` | svelte-check type checking |

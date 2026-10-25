@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "BrownASS",
-  "version": "0.2.1",
-  "identifier": "com.brownass.app",
+  "version": "0.3.0",
+  "identifier": "com.soundsbrown.brownass",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
