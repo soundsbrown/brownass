@@ -8,8 +8,10 @@ mod project_files;
 mod settings;
 mod shell;
 mod stylesheets;
+mod svg_import;
 mod video;
 mod waveform;
+mod woff;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -55,6 +57,7 @@ pub fn run() {
             stylesheets::save_stylesheet,
             stylesheets::delete_stylesheet,
             stylesheets::open_stylesheets_folder,
+            svg_import::import_svg,
             waveform::waveform
         ])
         .run(tauri::generate_context!())

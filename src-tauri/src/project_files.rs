@@ -271,7 +271,7 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 
 /// Reads a subtitle file as text: UTF-8 (with or without BOM) or UTF-16 with
 /// a BOM. Anything else is decoded as UTF-8, replacing invalid bytes.
-fn read_text(path: &Path) -> io::Result<String> {
+pub(crate) fn read_text(path: &Path) -> io::Result<String> {
     let bytes = fs::read(path)?;
     let utf16 = |data: &[u8], decode: fn([u8; 2]) -> u16| {
         let units: Vec<u16> = data.as_chunks::<2>().0.iter().map(|c| decode(*c)).collect();
