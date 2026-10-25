@@ -3,11 +3,11 @@
   import { player } from "$lib/player/player.svelte";
   import { chronological, selection } from "$lib/selection.svelte";
   import { formatTime } from "$lib/time";
-  import { styleColor } from "$lib/timeline/styleColors";
+  import { allStyleNames, styleColor } from "$lib/timeline/styleColors";
   import { previewText } from "$lib/timeline/tracks";
 
   const items = $derived(chronological(projectStore.project?.items ?? []));
-  const styleNames = $derived(Object.keys(projectStore.project?.styles ?? {}));
+  const styleNames = $derived(projectStore.project ? allStyleNames(projectStore.project) : []);
   let list: HTMLElement;
 
   // Keep the selected caption visible, however it was selected.
@@ -44,10 +44,14 @@
         <span class="time">{formatTime(item.start, 2)}</span>
         <span
           class="swatch"
-          style:background={styleColor(styleNames, item.type === "text" ? item.styleName : "").fill}
-          title={item.type === "text" ? item.styleName : ""}
+          style:background={styleColor(styleNames, item.styleName).fill}
+          title={item.styleName}
         ></span>
-        <span class="text">{item.type === "text" ? previewText(item.text) || "(empty)" : ""}</span>
+        <span class="text"
+          >{item.type === "text"
+            ? previewText(item.text) || "(empty)"
+            : `◆ ${item.shape.name}`}</span
+        >
       </button>
     {:else}
       <p class="empty">

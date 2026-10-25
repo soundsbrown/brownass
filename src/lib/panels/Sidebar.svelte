@@ -1,38 +1,62 @@
 <script lang="ts">
   import { projectStore } from "$lib/commands/store.svelte";
-  import { setItemSpan } from "$lib/commands/items";
+  import { setItemLayer, setItemSpan, setShapeGeometry } from "$lib/commands/items";
   import { linkStylesheet, setItemStyle } from "$lib/commands/styles";
-  import { captionsWithoutStyle, firstStyle, type Stylesheet } from "$lib/model/stylesheet";
+  import {
+    anyReassigned,
+    describeReassigned,
+    itemsWithoutStyle,
+    type Reassigned,
+    type Stylesheet,
+  } from "$lib/model/stylesheet";
   import { selection } from "$lib/selection.svelte";
   import { stylesheets } from "$lib/stylesheets.svelte";
+  import { chooseSvg } from "$lib/shapes/svg";
   import { snapToFrame } from "$lib/time";
   import CaptionList from "./CaptionList.svelte";
+  import NumberField from "./NumberField.svelte";
   import StylesView from "./StylesView.svelte";
   import TimeField from "./TimeField.svelte";
   import VideoInfoPanel from "./VideoInfoPanel.svelte";
 
   const project = $derived(projectStore.project);
-  const styleNames = $derived(Object.keys(project?.styles ?? {}));
   const sheet = $derived(stylesheets.get(project?.stylesheet));
-  const caption = $derived(selection.item?.type === "text" ? selection.item : null);
+  const item = $derived(selection.item);
+  /** The styles the selected item can use: text styles or shape styles. */
+  const styleNames = $derived(
+    Object.keys((item?.type === "shape" ? project?.shapeStyles : project?.styles) ?? {}),
+  );
 
   let editingStyles = $state(false);
-  /** A stylesheet switch waiting for confirmation, and how many captions it reassigns. */
-  let pendingSwitch = $state<{ sheet: Stylesheet; affected: number } | null>(null);
+  /** A stylesheet switch waiting for confirmation, and how many items it reassigns. */
+  let pendingSwitch = $state<{ sheet: Stylesheet; affected: Reassigned } | null>(null);
 
   function requestSwitch(select: HTMLSelectElement) {
     const next = stylesheets.get(select.value);
     // Show the current stylesheet until the switch actually happens.
     select.value = sheet?.id ?? "";
     if (!next || !project || next.id === sheet?.id) return;
-    const affected = captionsWithoutStyle(project, next);
-    if (affected === 0) switchTo(next);
+    const affected = itemsWithoutStyle(project, next);
+    if (!anyReassigned(affected)) switchTo(next);
     else pendingSwitch = { sheet: next, affected };
   }
 
   /** Each typed time is an undo step; a run of ↑/↓ nudges on one field is one. */
   function setTimes(id: string, field: string, start: number, end: number, nudge: boolean) {
     projectStore.execute(setItemSpan(id, start, end, nudge ? `nudge:${id}:${field}` : undefined));
+  }
+
+  /** Swaps a shape's SVG for another file, keeping its width. */
+  async function replaceSvg(id: string) {
+    const svg = await chooseSvg();
+    if (!svg) return;
+    const { name, width: sourceWidth, height: sourceHeight, parts } = svg;
+    projectStore.execute(setShapeGeometry(id, { name, sourceWidth, sourceHeight, parts }));
+  }
+
+  /** Typing in one geometry field is one undo step. */
+  function setGeometry(id: string, field: string, value: number) {
+    projectStore.execute(setShapeGeometry(id, { [field]: value }, `shape:${id}:${field}`));
   }
 
   function switchTo(next: Stylesheet) {
@@ -50,47 +74,70 @@
 
     <section>
       <h2>Properties</h2>
-      {#if caption && project}
+      {#if item && project}
         {@const fps = project.video.fps}
         <div class="props">
           <TimeField
             label="Start"
-            value={caption.start}
+            value={item.start}
             {fps}
             onchange={(t, nudge) =>
-              setTimes(caption.id, "start", snapToFrame(t, fps), caption.end, nudge)}
+              setTimes(item.id, "start", snapToFrame(t, fps), item.end, nudge)}
           />
           <TimeField
             label="End"
-            value={caption.end}
+            value={item.end}
             {fps}
             onchange={(t, nudge) =>
-              setTimes(caption.id, "end", caption.start, snapToFrame(t, fps), nudge)}
+              setTimes(item.id, "end", item.start, snapToFrame(t, fps), nudge)}
           />
           <TimeField
             label="Duration"
-            value={caption.end - caption.start}
+            value={item.end - item.start}
             {fps}
             onchange={(d, nudge) =>
               setTimes(
-                caption.id,
+                item.id,
                 "duration",
-                caption.start,
-                caption.start + Math.max(1 / fps, snapToFrame(d, fps)),
+                item.start,
+                item.start + Math.max(1 / fps, snapToFrame(d, fps)),
                 nudge,
               )}
           />
-          <label class="label" for="caption-style">Style</label>
+          <label class="label" for="item-style">Style</label>
           <select
-            id="caption-style"
-            value={caption.styleName}
-            onchange={(e) => projectStore.execute(setItemStyle(caption.id, e.currentTarget.value))}
+            id="item-style"
+            value={item.styleName}
+            onchange={(e) => projectStore.execute(setItemStyle(item.id, e.currentTarget.value))}
           >
             {#each styleNames as name (name)}<option value={name}>{name}</option>{/each}
           </select>
+          {#if item.type === "shape"}
+            {@const shape = item.shape}
+            <NumberField
+              label="Layer"
+              value={item.layer}
+              onchange={(v) => projectStore.execute(setItemLayer(item.id, v))}
+            />
+            <NumberField
+              label="Width"
+              value={shape.width}
+              min={1}
+              unit="px"
+              onchange={(v) => setGeometry(item.id, "width", v)}
+            />
+            <span class="label">Height</span>
+            <span class="muted"
+              >{Number(((shape.width * shape.sourceHeight) / shape.sourceWidth).toFixed(2))} px</span
+            >
+            <span class="label">File</span>
+            <button class="replace" title={shape.name} onclick={() => replaceSvg(item.id)}
+              >Replace SVG…</button
+            >
+          {/if}
         </div>
       {:else}
-        <p class="muted">No caption selected</p>
+        <p class="muted">Nothing selected</p>
       {/if}
     </section>
 
@@ -116,12 +163,11 @@
         {#if pendingSwitch}
           <div class="confirm" role="alert">
             <p>
-              {pendingSwitch.affected} caption{pendingSwitch.affected === 1
-                ? " uses a style"
-                : "s use styles"}
-              "{pendingSwitch.sheet.name}" doesn't have. {pendingSwitch.affected === 1
-                ? "It"
-                : "They"} will switch to "{firstStyle(pendingSwitch.sheet)}".
+              Some items use styles "{pendingSwitch.sheet.name}" doesn't have: {describeReassigned(
+                pendingSwitch.affected,
+                pendingSwitch.sheet,
+                "will",
+              )}.
             </p>
             <div class="actions">
               <button class="danger" onclick={() => pendingSwitch && switchTo(pendingSwitch.sheet)}>
@@ -207,6 +253,10 @@
     grid-template-columns: 70px 1fr;
     align-items: center;
     gap: 6px 8px;
+  }
+
+  .replace {
+    justify-self: start;
   }
 
   .props :global(.label) {

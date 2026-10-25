@@ -1,4 +1,12 @@
-import type { AssStyle, AssStyleOverrides, Item, Project, TextItem } from "$lib/model/project";
+import type {
+  AssStyle,
+  AssStyleOverrides,
+  Item,
+  Project,
+  ShapeGeometry,
+  ShapeStyle,
+  TextItem,
+} from "$lib/model/project";
 import type { Seconds } from "$lib/time";
 import type { Command } from "./history";
 
@@ -39,7 +47,7 @@ function updateText(project: Project, id: string, update: (item: TextItem) => Te
 
 export function addItem(item: Item): Command {
   return {
-    label: "Add subtitle",
+    label: item.type === "shape" ? "Add shape" : "Add subtitle",
     apply: (p) => {
       if (p.items.some((i) => i.id === item.id)) return p;
       return { ...p, items: [...p.items, { ...item, ...clampSpan(p, item.start, item.end) }] };
@@ -142,5 +150,60 @@ export function setStyle(name: string, changes: Partial<AssStyle>, mergeKey?: st
       );
       return changed ? { ...p, styles: { ...p.styles, [name]: { ...style, ...changes } } } : p;
     },
+  };
+}
+
+/** Changes properties of a named shape style, affecting every shape that uses it. */
+export function setShapeStyle(
+  name: string,
+  changes: Partial<ShapeStyle>,
+  mergeKey?: string,
+): Command {
+  return {
+    label: "Change shape style",
+    mergeKey,
+    apply: (p) => {
+      const style = p.shapeStyles[name];
+      if (!style) return p;
+      const changed = (Object.keys(changes) as (keyof ShapeStyle)[]).some(
+        (k) => changes[k] !== style[k],
+      );
+      if (!changed) return p;
+      return { ...p, shapeStyles: { ...p.shapeStyles, [name]: { ...style, ...changes } } };
+    },
+  };
+}
+
+/**
+ * Changes a shape's size or picture. A run of edits to one field coalesces
+ * when given a `mergeKey`.
+ */
+export function setShapeGeometry(
+  id: string,
+  changes: Partial<ShapeGeometry>,
+  mergeKey?: string,
+): Command {
+  return {
+    label: "Change shape",
+    mergeKey,
+    apply: (p) =>
+      updateItem(p, id, (item) => {
+        if (item.type !== "shape") return item;
+        const shape: Record<string, unknown> = item.shape;
+        if (!Object.entries(changes).some(([k, v]) => shape[k] !== v)) return item;
+        return { ...item, shape: { ...item.shape, ...changes } };
+      }),
+  };
+}
+
+/** Moves an item to another ASS layer (higher layers draw on top). */
+export function setItemLayer(id: string, layer: number): Command {
+  return {
+    label: "Change layer",
+    apply: (p) =>
+      updateItem(p, id, (item) => {
+        const l = Math.max(0, Math.round(layer));
+        return l === item.layer ? item : { ...item, layer: l };
+      }),
   };
 }

@@ -1,16 +1,19 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { projectStore } from "$lib/commands/store.svelte";
-  import { addStyle, deleteStyle, renameStyle } from "$lib/commands/styles";
+  import { addStyle, deleteStyle, renameStyle, type StyleKind } from "$lib/commands/styles";
   import {
     STYLESHEET_VERSION,
-    captionsWithoutStyle,
-    firstStyle,
+    anyReassigned,
+    describeReassigned,
+    itemsWithoutStyle,
+    uniqueStyleName,
     type Stylesheet,
   } from "$lib/model/stylesheet";
   import { selection } from "$lib/selection.svelte";
   import { stylesheets } from "$lib/stylesheets.svelte";
-  import { styleColor } from "$lib/timeline/styleColors";
+  import { allStyleNames, styleColor } from "$lib/timeline/styleColors";
+  import ShapeStyleEditor from "./ShapeStyleEditor.svelte";
   import StyleEditor from "./StyleEditor.svelte";
 
   interface Props {
@@ -21,38 +24,54 @@
   let { onDone, switchTo }: Props = $props();
 
   const project = $derived(projectStore.project);
-  const styleNames = $derived(Object.keys(project?.styles ?? {}));
   const sheet = $derived(stylesheets.get(project?.stylesheet));
-  const caption = $derived(selection.item?.type === "text" ? selection.item : null);
+  const selected = $derived(selection.item);
 
-  /** The style shown in the editor. */
-  let editing = $state<string | null>(untrack(() => caption?.styleName ?? null));
+  /** Which list is shown: text styles (captions) or shape styles. */
+  let kind = $state<StyleKind>(untrack(() => (selected?.type === "shape" ? "shape" : "text")));
+  const styleNames = $derived(
+    Object.keys((kind === "text" ? project?.styles : project?.shapeStyles) ?? {}),
+  );
+  const colorNames = $derived(project ? allStyleNames(project) : []);
+
+  /** The style shown in the editor, per list. */
+  let editing = $state<Record<StyleKind, string | null>>(
+    untrack(() => ({
+      text: selected?.type === "text" ? selected.styleName : null,
+      shape: selected?.type === "shape" ? selected.styleName : null,
+    })),
+  );
   let renamingStyle = $state<string | null>(null);
   let renamingSheet = $state(false);
   let confirmDelete = $state(false);
 
-  // Selecting a caption shows its style.
+  // Selecting a caption or shape shows its style.
   $effect(() => {
-    const styleName = caption?.styleName;
-    if (styleName) untrack(() => (editing = styleName));
+    const item = selected;
+    if (!item) return;
+    untrack(() => {
+      kind = item.type === "shape" ? "shape" : "text";
+      editing[kind] = item.styleName;
+    });
   });
-  const shown = $derived(
-    editing && styleNames.includes(editing) ? editing : (styleNames[0] ?? null),
-  );
+  const shown = $derived.by(() => {
+    const name = editing[kind];
+    return name && styleNames.includes(name) ? name : (styleNames[0] ?? null);
+  });
 
   /** Where this video goes if its stylesheet is deleted. */
   const replacement = $derived(stylesheets.list.find((s) => s.id !== sheet?.id));
 
-  function uniqueName(base: string, taken: string[]): string {
-    if (!taken.includes(base)) return base;
-    for (let n = 2; ; n++) if (!taken.includes(`${base} ${n}`)) return `${base} ${n}`;
-  }
-
   function newStyle() {
     if (!project || !shown) return;
-    const name = uniqueName("New style", styleNames);
-    projectStore.execute(addStyle(name, project.styles[shown]));
-    editing = name;
+    // Names are unique across text and shape styles.
+    const name = uniqueStyleName(kind === "text" ? "New style" : "New shape style", colorNames);
+    projectStore.execute(
+      kind === "text"
+        ? addStyle(name, project.styles[shown])
+        : addStyle(name, project.shapeStyles[shown], "shape"),
+    );
+    editing[kind] = name;
     renamingStyle = name;
   }
 
@@ -60,8 +79,8 @@
     renamingStyle = null;
     const name = to.trim();
     if (!name || name === from) return;
-    projectStore.execute(renameStyle(from, name));
-    if (project && name in project.styles) editing = name;
+    projectStore.execute(renameStyle(from, name, kind));
+    if (styleNames.includes(name)) editing[kind] = name;
   }
 
   async function copyStylesheet() {
@@ -69,11 +88,12 @@
     const created: Stylesheet = {
       version: STYLESHEET_VERSION,
       id: crypto.randomUUID(),
-      name: uniqueName(
+      name: uniqueStyleName(
         `${sheet.name} copy`,
         stylesheets.list.map((s) => s.name),
       ),
       styles: { ...sheet.styles },
+      shapeStyles: { ...sheet.shapeStyles },
     };
     await stylesheets.put(created);
     // Same styles, so no caption changes.
@@ -147,13 +167,12 @@
       >
     </div>
     {#if confirmDelete && sheet && replacement && project}
-      {@const affected = captionsWithoutStyle(project, replacement)}
+      {@const affected = itemsWithoutStyle(project, replacement)}
       <div class="confirm" role="alert">
         <p>
-          Delete "{sheet.name}" for all videos? This video switches to "{replacement.name}"{#if affected > 0},
-            and {affected} caption{affected === 1 ? "" : "s"} switch to "{firstStyle(
-              replacement,
-            )}"{/if}. Other videos switch when next opened.
+          Delete "{sheet.name}" for all videos? This video switches to "{replacement.name}"{#if anyReassigned(affected)},
+            and {describeReassigned(affected, replacement, "will")}{/if}. Other videos switch when
+          next opened.
         </p>
         <div class="actions">
           <button class="danger" onclick={deleteStylesheet}>Delete</button>
@@ -164,7 +183,22 @@
   </section>
 
   <section class="styles">
-    <h2>Styles</h2>
+    <div class="tabs" role="tablist">
+      <button
+        role="tab"
+        aria-selected={kind === "text"}
+        class:active={kind === "text"}
+        onpointerdown={keepFocus}
+        onclick={() => (kind = "text")}>Text styles</button
+      >
+      <button
+        role="tab"
+        aria-selected={kind === "shape"}
+        class:active={kind === "shape"}
+        onpointerdown={keepFocus}
+        onclick={() => (kind = "shape")}>Shape styles</button
+      >
+    </div>
     <ul class="style-list">
       {#each styleNames as name (name)}
         <li>
@@ -185,9 +219,9 @@
               class="style"
               class:active={name === shown}
               onpointerdown={keepFocus}
-              onclick={() => (editing = name)}
+              onclick={() => (editing[kind] = name)}
               ondblclick={() => (renamingStyle = name)}
-              ><span class="swatch" style:background={styleColor(styleNames, name).fill}
+              ><span class="swatch" style:background={styleColor(colorNames, name).fill}
               ></span>{name}</button
             >
           {/if}
@@ -204,13 +238,18 @@
       <button
         onpointerdown={keepFocus}
         disabled={!shown || styleNames.length < 2}
-        title="Captions using it switch to the first remaining style"
-        onclick={() => shown && projectStore.execute(deleteStyle(shown))}>Delete</button
+        title={kind === "text"
+          ? "Captions using it switch to the first remaining style"
+          : "Shapes using it switch to the first remaining shape style"}
+        onclick={() => shown && projectStore.execute(deleteStyle(shown, undefined, kind))}
+        >Delete</button
       >
     </div>
 
-    {#if shown}
+    {#if shown && kind === "text"}
       <StyleEditor name={shown} />
+    {:else if shown}
+      <ShapeStyleEditor name={shown} />
     {/if}
   </section>
 </div>
@@ -259,13 +298,22 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .styles h2 {
-    margin: 0 0 8px;
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 8px;
+  }
+
+  .tabs button {
+    flex: 1;
+    padding: 2px 8px;
     font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
     color: var(--muted);
+  }
+
+  .tabs button.active {
+    color: inherit;
+    border-color: var(--item-selected);
   }
 
   .actions {

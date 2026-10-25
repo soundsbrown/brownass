@@ -22,8 +22,14 @@ describe("parseAss", () => {
   it("writes a lower-resolution file's styles back exactly", () => {
     const original = fixture("aegisub-sample.ass");
     const styleLines = (text: string) => text.split("\n").filter((l) => l.startsWith("Style:"));
+    // Except for the shadow, which is written as separate events.
+    const noShadow = (line: string) =>
+      line
+        .split(",")
+        .map((f, i) => (i === 17 ? "0" : f))
+        .join(",");
     const { project } = parseAss(original, video);
-    expect(styleLines(serializeAss(project))).toEqual(styleLines(original));
+    expect(styleLines(serializeAss(project))).toEqual(styleLines(original).map(noShadow));
   });
 
   it("produces a valid project", () => {

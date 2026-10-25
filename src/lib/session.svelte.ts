@@ -5,7 +5,12 @@ import { serializeAss } from "$lib/ass/serialize";
 import { projectStore } from "$lib/commands/store.svelte";
 import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
-import { conformToStylesheet, firstStyle } from "$lib/model/stylesheet";
+import {
+  anyReassigned,
+  conformToStylesheet,
+  describeReassigned,
+  firstStyle,
+} from "$lib/model/stylesheet";
 import { stylesheets } from "$lib/stylesheets.svelte";
 import { log } from "$lib/log";
 import { exporter } from "$lib/export/exporter.svelte";
@@ -56,6 +61,7 @@ class Session {
   #assName = "";
   /** The project's styles as last mirrored to its stylesheet. */
   #syncedStyles: Project["styles"] | undefined;
+  #syncedShapeStyles: Project["shapeStyles"] | undefined;
   #syncedSheet: string | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #saving: Promise<void> = Promise.resolve();
@@ -195,6 +201,7 @@ class Session {
 
     projectStore.reset(project);
     this.#syncedStyles = project.styles;
+    this.#syncedShapeStyles = project.shapeStyles;
     this.#syncedSheet = project.stylesheet;
     this.#savedRevision = projectStore.revision;
     this.saveStatus = "clean";
@@ -223,9 +230,9 @@ class Session {
       }
     }
     const { project: linked, reassigned } = conformToStylesheet(project, sheet);
-    if (reassigned > 0) {
+    if (anyReassigned(reassigned)) {
       notes.push(
-        `${reassigned} caption${reassigned === 1 ? "" : "s"} used a style "${sheet.name}" doesn't have, and now use${reassigned === 1 ? "s" : ""} "${firstStyle(sheet)}".`,
+        `Some items used styles "${sheet.name}" doesn't have: ${describeReassigned(reassigned, sheet, "now")}.`,
       );
     }
     return { project: linked, notes };
@@ -238,10 +245,13 @@ class Session {
     const sheet = stylesheets.get(project.stylesheet);
     // Switching stylesheets isn't an edit of either one.
     const sameSheet = project.stylesheet === this.#syncedSheet;
-    if (sheet && sameSheet && project.styles !== this.#syncedStyles) {
-      void stylesheets.put({ ...sheet, styles: project.styles });
+    const changed =
+      project.styles !== this.#syncedStyles || project.shapeStyles !== this.#syncedShapeStyles;
+    if (sheet && sameSheet && changed) {
+      void stylesheets.put({ ...sheet, styles: project.styles, shapeStyles: project.shapeStyles });
     }
     this.#syncedStyles = project.styles;
+    this.#syncedShapeStyles = project.shapeStyles;
     this.#syncedSheet = project.stylesheet;
   }
 
@@ -287,7 +297,8 @@ function videoRef(info: VideoInfo): VideoRef {
 }
 
 function sameContent(a: Project, b: Project): boolean {
-  return JSON.stringify([a.styles, a.items]) === JSON.stringify([b.styles, b.items]);
+  const content = (p: Project) => JSON.stringify([p.styles, p.shapeStyles, p.items]);
+  return content(a) === content(b);
 }
 
 function baseName(path: string): string {

@@ -8,6 +8,7 @@
   import { selection } from "$lib/selection.svelte";
   import { formatTime } from "$lib/time";
   import { drawTimeline, type Colors } from "./draw";
+  import { allStyleNames } from "./styleColors";
   import { createSpan, moveSpan, resizeSpan, type SnapContext, type Span } from "./drag";
   import { geometry, hitTest, itemEdges, layoutRows, type Hit } from "./tracks";
   import {
@@ -268,7 +269,7 @@
         video: player.video,
         time: player.time,
         items,
-        styleNames: Object.keys(projectStore.project?.styles ?? {}),
+        styleNames: projectStore.project ? allStyleNames(projectStore.project) : [],
         layout,
         selectedId: selection.item?.id ?? null,
         ghost:

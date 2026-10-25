@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { addItem, editText, setStyle } from "$lib/commands/items";
+import { addItem, editText, setShapeStyle, setStyle } from "$lib/commands/items";
 import { projectStore } from "$lib/commands/store.svelte";
 import { createProject } from "$lib/model/defaults";
 import { parseProjectFile, serializeProjectFile } from "$lib/model/file";
@@ -81,6 +81,18 @@ describe("stylesheets", () => {
     projectStore.undo();
     session.changed(projectStore.revision);
     expect(stylesheets.default.styles.Subtitle.fontName).toBe("Arial");
+  });
+
+  it("writes shape style edits back to the stylesheet", async () => {
+    await openWith({ kind: "none" });
+    expect(Object.keys(projectStore.project!.shapeStyles)).toEqual(["Shape"]);
+    backend.calls = [];
+    projectStore.execute(setShapeStyle("Shape", { opacity: 40 }));
+    session.changed(projectStore.revision);
+    await stylesheets.put(stylesheets.default); // wait for queued saves
+    const saved = stylesheetSaves()[0];
+    expect(saved.shapeStyles.Shape.opacity).toBe(40);
+    expect(saved.styles).toEqual(stylesheets.default.styles);
   });
 
   it("refreshes an existing project from its stylesheet and re-exports it", async () => {
@@ -167,7 +179,7 @@ describe("session", () => {
     // Its "Default" style isn't in the stylesheet, so the caption is moved.
     expect((projectStore.project?.items[0] as { styleName: string }).styleName).toBe("Subtitle");
     expect(session.prompt).toMatchObject({
-      text: expect.stringMatching(/^1 caption used a style/),
+      text: expect.stringMatching(/: 1 caption now uses "Subtitle".$/),
     });
   });
 

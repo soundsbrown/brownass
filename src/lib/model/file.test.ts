@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProject } from "./defaults";
+import { createProject, defaultShapeStyle } from "./defaults";
 import { ProjectFileError, parseProjectFile, serializeProjectFile } from "./file";
 import { PROJECT_VERSION, type Project } from "./project";
 
@@ -58,6 +58,14 @@ describe("migrations", () => {
       fadeOut: 0,
     });
     expect(p.items).toHaveLength(1);
+    expect(p.shapeStyles).toEqual({});
+  });
+
+  it("upgrades v2: no shape styles yet", () => {
+    const { shapeStyles, ...v2 } = { ...sample(), version: 2 };
+    expect(shapeStyles).toEqual({});
+    const p = parseProjectFile(JSON.stringify(v2));
+    expect(p).toEqual(sample());
   });
 });
 
@@ -89,6 +97,52 @@ describe("project file", () => {
     expect(() => parseProjectFile(JSON.stringify(backwards))).toThrow(/end after it starts/);
     const missingStyle = { ...p, items: [{ ...p.items[0], styleName: "Nope" }] };
     expect(() => parseProjectFile(JSON.stringify(missingStyle))).toThrow(/existing style/);
+  });
+
+  const logo = {
+    name: "logo.svg",
+    width: 200,
+    sourceWidth: 24,
+    sourceHeight: 12,
+    parts: [{ color: { r: 1, g: 2, b: 3, a: 255 }, path: "m 0 0 l 24 0 b 24 6 12 12 0 12" }],
+  };
+
+  it("round-trips shapes", () => {
+    const p = sample();
+    p.shapeStyles = { Box: defaultShapeStyle() };
+    p.items.push({
+      id: "s",
+      type: "shape",
+      start: 0,
+      end: 1,
+      layer: 1,
+      styleName: "Box",
+      shape: logo,
+    });
+    expect(parseProjectFile(serializeProjectFile(p))).toEqual(p);
+  });
+
+  it("checks shapes", () => {
+    const p = sample();
+    p.shapeStyles = { Box: defaultShapeStyle() };
+    const shape = {
+      id: "r",
+      type: "shape",
+      start: 0,
+      end: 1,
+      layer: 0,
+      styleName: "Box",
+      shape: logo,
+    } as const;
+    const missing = { ...p, items: [{ ...shape, styleName: "Default" }] };
+    expect(() => parseProjectFile(JSON.stringify(missing))).toThrow(/existing shape style/);
+    const clash = { ...p, shapeStyles: { Default: defaultShapeStyle() } };
+    expect(() => parseProjectFile(JSON.stringify(clash))).toThrow(/different names/);
+    const flat = { ...p, items: [{ ...shape, shape: { ...logo, width: 0 } }] };
+    expect(() => parseProjectFile(JSON.stringify(flat))).toThrow(/items\.0\.shape\.width/);
+    const parts = [{ color: { r: 0, g: 0, b: 0, a: 255 }, path: "m 0 0 q 1" }];
+    const badPath = { ...p, items: [{ ...shape, shape: { ...logo, parts } }] };
+    expect(() => parseProjectFile(JSON.stringify(badPath))).toThrow(/Invalid drawing/);
   });
 
   it("rejects style names that would break ASS lines", () => {

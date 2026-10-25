@@ -1,4 +1,4 @@
-import type { AssStyle } from "./project";
+import type { AssStyle, ShapeStyle } from "./project";
 
 /** Style sizes are defined in pixels of a frame with this many lines. */
 export const REFERENCE_LINES = 1080;
@@ -38,5 +38,18 @@ export function unscaleStyle(style: AssStyle, factor: number): AssStyle {
     marginL: style.marginL / factor,
     marginR: style.marginR / factor,
     marginV: style.marginV / factor,
+  };
+}
+
+/** The shape style's sizes multiplied by `factor` (shapes are placed with `\pos`, so no rounding). */
+export function scaleShapeStyle(style: ShapeStyle, factor: number): ShapeStyle {
+  return {
+    ...style,
+    outline: style.outline * factor,
+    shadow: style.shadow * factor,
+    blur: style.blur * factor,
+    marginL: style.marginL * factor,
+    marginR: style.marginR * factor,
+    marginV: style.marginV * factor,
   };
 }

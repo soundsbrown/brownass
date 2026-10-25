@@ -153,7 +153,7 @@ function drawItems(ctx: CanvasRenderingContext2D, s: Scene, c: Colors) {
     if (item.end < visibleStart || item.start > visibleEnd) continue;
     const row = s.layout.rowOf.get(item.id);
     if (row === undefined) continue;
-    const label = item.type === "text" ? previewText(item.text) : "";
+    const label = item.type === "text" ? previewText(item.text) : `◆ ${item.shape.name}`;
     drawBox(ctx, s, row, item, item.id === s.selectedId, label, c);
   }
 
@@ -192,7 +192,7 @@ function drawBox(
   // A 1 px gap at the end keeps touching subtitles visibly separate.
   const width = Math.max(1, x1 - x0 - 1);
 
-  const color = styleColor(s.styleNames, item.type === "text" ? item.styleName : "");
+  const color = styleColor(s.styleNames, item.styleName);
   ctx.fillStyle = selected ? color.selected : color.fill;
   ctx.fillRect(x0, y, width, h);
   if (selected) {

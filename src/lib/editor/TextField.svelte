@@ -92,6 +92,8 @@
           >
         {/each}
       </span>
+    {:else if selection.item?.type === "shape"}
+      <span class="muted">Shapes have no text</span>
     {:else}
       <span class="muted">Drag in the timeline to create a subtitle, or click one to edit it</span>
     {/if}

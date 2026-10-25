@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createProject } from "$lib/model/defaults";
-import type { Project, TextItem } from "$lib/model/project";
+import { createProject, defaultShapeStyle } from "$lib/model/defaults";
+import type { Project, ShapeItem, TextItem } from "$lib/model/project";
 import { History, MERGE_WINDOW_MS, inGesture, newGestureKey, type Command } from "./history";
 import {
   addItem,
@@ -9,8 +9,11 @@ import {
   duplicateItem,
   editText,
   moveItem,
+  setItemLayer,
   setItemSpan,
   setOverride,
+  setShapeGeometry,
+  setShapeStyle,
   setStyle,
 } from "./items";
 
@@ -151,5 +154,65 @@ describe("overrides", () => {
     setOverride("a", "fade", { in: 100, out: 100 }).apply(before);
     setStyle("Default", { fontSize: 99 }).apply(before);
     expect(before).toEqual(frozen);
+  });
+});
+
+describe("shapes", () => {
+  function withShape(): Project {
+    const p = { ...project(), shapeStyles: { Box: defaultShapeStyle() } };
+    const shape: ShapeItem = {
+      id: "s",
+      type: "shape",
+      start: 1,
+      end: 2,
+      layer: 0,
+      styleName: "Box",
+      shape: {
+        name: "logo.svg",
+        width: 100,
+        sourceWidth: 10,
+        sourceHeight: 5,
+        parts: [{ color: { r: 0, g: 0, b: 0, a: 255 }, path: "m 0 0 l 10 0 10 5" }],
+      },
+    };
+    return addItem(shape).apply(p);
+  }
+  const shapeOf = (p: Project) => (p.items[0] as ShapeItem).shape;
+
+  it("are undoable", () => {
+    for (const command of [
+      setShapeGeometry("s", { width: 200 }),
+      setShapeStyle("Box", { opacity: 10 }),
+      setItemLayer("s", 3),
+    ]) {
+      const history = new History();
+      const before = withShape();
+      const after = history.execute(before, command);
+      expect(after).not.toEqual(before);
+      expect(history.undo(after)).toEqual(before);
+    }
+  });
+
+  it("skip unchanged values and can replace the picture", () => {
+    const p = withShape();
+    expect(setShapeGeometry("s", { width: 100 }).apply(p)).toBe(p);
+    const parts = [{ color: { r: 9, g: 9, b: 9, a: 255 }, path: "m 0 0 l 4 0 4 4" }];
+    const next = { name: "new.svg", sourceWidth: 4, sourceHeight: 4, parts };
+    expect(shapeOf(setShapeGeometry("s", next).apply(p))).toEqual({ ...next, width: 100 });
+  });
+
+  it("coalesce a run of edits with a merge key", () => {
+    const history = new History();
+    const before = withShape();
+    let p = history.execute(before, setShapeGeometry("s", { width: 110 }, "w"));
+    p = history.execute(p, setShapeGeometry("s", { width: 120 }, "w"));
+    expect(shapeOf(p)).toMatchObject({ width: 120 });
+    expect(history.undo(p)).toEqual(before);
+  });
+
+  it("keep layers whole and non-negative", () => {
+    const p = withShape();
+    expect(setItemLayer("s", -2).apply(p)).toBe(p);
+    expect(setItemLayer("s", 2.6).apply(p).items[0].layer).toBe(3);
   });
 });

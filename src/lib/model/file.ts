@@ -27,6 +27,9 @@ const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string
     );
     return { ...old, styles };
   },
+  // v3: shape items, styled by shape styles. Linking to the stylesheet fills
+  // these in on open.
+  2: (old) => ({ ...old, shapeStyles: {} }),
 };
 
 export class ProjectFileError extends Error {}

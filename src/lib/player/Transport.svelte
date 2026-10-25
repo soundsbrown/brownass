@@ -1,4 +1,9 @@
 <script lang="ts">
+  import { addItem } from "$lib/commands/items";
+  import { projectStore } from "$lib/commands/store.svelte";
+  import { selection } from "$lib/selection.svelte";
+  import { newShape } from "$lib/shapes/shapes";
+  import { chooseSvg, svgGeometry } from "$lib/shapes/svg";
   import { formatTime } from "$lib/time";
   import { exporter } from "$lib/export/exporter.svelte";
   import { recents } from "$lib/recents.svelte";
@@ -22,6 +27,16 @@
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   });
+
+  /** Imports an SVG as a shape at the playhead and selects it. */
+  async function importShape() {
+    const svg = await chooseSvg();
+    const project = projectStore.project;
+    if (!svg || !project) return;
+    const item = newShape(project, svgGeometry(svg), player.time);
+    projectStore.execute(addItem(item));
+    selection.select(item.id);
+  }
 </script>
 
 <div class="transport">
@@ -48,6 +63,12 @@
       onclick={() => (exporter.dialogOpen = true)}
       {disabled}
       title="Export (Ctrl+E)">Export…</button
+    >
+    <button
+      onpointerdown={keepFocus}
+      onclick={importShape}
+      disabled={!projectStore.project}
+      title="Import an SVG as a shape at the playhead">Add SVG…</button
     >
   </div>
 

@@ -1,4 +1,10 @@
-import { PROJECT_VERSION, type AssStyle, type Project, type VideoRef } from "./project";
+import {
+  PROJECT_VERSION,
+  type AssStyle,
+  type Project,
+  type ShapeStyle,
+  type VideoRef,
+} from "./project";
 
 export const DEFAULT_STYLE = "Default";
 
@@ -33,6 +39,24 @@ export function defaultStyle(): AssStyle {
   };
 }
 
+/** Shapes as drawn, in the middle of the frame (in reference pixels). */
+export function defaultShapeStyle(): ShapeStyle {
+  return {
+    opacity: 100,
+    outlineColor: { r: 0, g: 0, b: 0, a: 255 },
+    outline: 0,
+    shadowColor: { r: 0, g: 0, b: 0, a: 128 },
+    shadow: 0,
+    blur: 0,
+    alignment: 5,
+    marginL: 0,
+    marginR: 0,
+    marginV: 0,
+    fadeIn: 0,
+    fadeOut: 0,
+  };
+}
+
 /** An empty project for a video; `playRes` matches the video's size. */
 export function createProject(video: VideoRef): Project {
   const playRes = { x: video.width, y: video.height };
@@ -41,6 +65,7 @@ export function createProject(video: VideoRef): Project {
     video,
     playRes,
     styles: { [DEFAULT_STYLE]: defaultStyle() },
+    shapeStyles: {},
     items: [],
   };
 }
