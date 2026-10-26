@@ -13,6 +13,7 @@
   import { selection } from "$lib/selection.svelte";
   import { stylesheets } from "$lib/stylesheets.svelte";
   import { allStyleNames, styleColor } from "$lib/timeline/styleColors";
+  import OverlaysEditor from "./OverlaysEditor.svelte";
   import ShapeStyleEditor from "./ShapeStyleEditor.svelte";
   import StyleEditor from "./StyleEditor.svelte";
 
@@ -27,8 +28,11 @@
   const sheet = $derived(stylesheets.get(project?.stylesheet));
   const selected = $derived(selection.item);
 
-  /** Which list is shown: text styles (captions) or shape styles. */
-  let kind = $state<StyleKind>(untrack(() => (selected?.type === "shape" ? "shape" : "text")));
+  /** Which tab is shown: text styles (captions), shape styles or overlays. */
+  let tab = $state<StyleKind | "overlays">(
+    untrack(() => (selected?.type === "shape" ? "shape" : "text")),
+  );
+  const kind = $derived<StyleKind>(tab === "text" ? "text" : "shape");
   const styleNames = $derived(
     Object.keys((kind === "text" ? project?.styles : project?.shapeStyles) ?? {}),
   );
@@ -50,8 +54,8 @@
     const item = selected;
     if (!item) return;
     untrack(() => {
-      kind = item.type === "shape" ? "shape" : "text";
-      editing[kind] = item.styleName;
+      tab = item.type === "shape" ? "shape" : "text";
+      editing[tab] = item.styleName;
     });
   });
   const shown = $derived.by(() => {
@@ -117,6 +121,12 @@
     switchTo(replacement);
     await stylesheets.remove(removed.id);
   }
+
+  const tabs = [
+    { id: "text", label: "Text styles" },
+    { id: "shape", label: "Shape styles" },
+    { id: "overlays", label: "Overlays" },
+  ] as const;
 
   const keepFocus = (e: PointerEvent) => e.preventDefault();
 </script>
@@ -185,72 +195,76 @@
 
   <section class="styles">
     <div class="tabs" role="tablist">
-      <button
-        role="tab"
-        aria-selected={kind === "text"}
-        class:active={kind === "text"}
-        onpointerdown={keepFocus}
-        onclick={() => (kind = "text")}>Text styles</button
-      >
-      <button
-        role="tab"
-        aria-selected={kind === "shape"}
-        class:active={kind === "shape"}
-        onpointerdown={keepFocus}
-        onclick={() => (kind = "shape")}>Shape styles</button
-      >
-    </div>
-    <ul class="style-list">
-      {#each styleNames as name (name)}
-        <li>
-          {#if renamingStyle === name}
-            <!-- svelte-ignore a11y_autofocus -->
-            <input
-              value={name}
-              autofocus
-              aria-label="Style name"
-              onblur={(e) => finishRenameStyle(name, e.currentTarget.value)}
-              onkeydown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") renamingStyle = null;
-              }}
-            />
-          {:else}
-            <button
-              class="style"
-              class:active={name === shown}
-              onpointerdown={keepFocus}
-              onclick={() => (editing[kind] = name)}
-              ondblclick={() => (renamingStyle = name)}
-              ><span class="swatch" style:background={styleColor(colorNames, name).fill}
-              ></span>{name}</button
-            >
-          {/if}
-        </li>
+      {#each tabs as t (t.id)}
+        <button
+          role="tab"
+          aria-selected={tab === t.id}
+          class:active={tab === t.id}
+          onpointerdown={keepFocus}
+          onclick={() => (tab = t.id)}>{t.label}</button
+        >
       {/each}
-    </ul>
-    <div class="actions">
-      <button onpointerdown={keepFocus} onclick={newStyle} title="Copy the selected style"
-        >New</button
-      >
-      <button onpointerdown={keepFocus} disabled={!shown} onclick={() => (renamingStyle = shown)}>
-        Rename
-      </button>
-      <button
-        onpointerdown={keepFocus}
-        disabled={!shown || styleNames.length < 2}
-        title={kind === "text"
-          ? "Captions using it switch to the first remaining style"
-          : "Shapes using it switch to the first remaining shape style"}
-        onclick={() => shown && projectStore.execute(deleteStyle(shown, undefined, kind))}
-        >Delete</button
-      >
     </div>
+    {#if tab === "overlays"}
+      <OverlaysEditor
+        oneditstyle={(name) => {
+          tab = "shape";
+          editing.shape = name;
+        }}
+      />
+    {:else}
+      <ul class="style-list">
+        {#each styleNames as name (name)}
+          <li>
+            {#if renamingStyle === name}
+              <!-- svelte-ignore a11y_autofocus -->
+              <input
+                value={name}
+                autofocus
+                aria-label="Style name"
+                onblur={(e) => finishRenameStyle(name, e.currentTarget.value)}
+                onkeydown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") renamingStyle = null;
+                }}
+              />
+            {:else}
+              <button
+                class="style"
+                class:active={name === shown}
+                onpointerdown={keepFocus}
+                onclick={() => (editing[kind] = name)}
+                ondblclick={() => (renamingStyle = name)}
+                ><span class="swatch" style:background={styleColor(colorNames, name).fill}
+                ></span>{name}</button
+              >
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      <div class="actions">
+        <button onpointerdown={keepFocus} onclick={newStyle} title="Copy the selected style"
+          >New</button
+        >
+        <button onpointerdown={keepFocus} disabled={!shown} onclick={() => (renamingStyle = shown)}>
+          Rename
+        </button>
+        <button
+          onpointerdown={keepFocus}
+          disabled={!shown || styleNames.length < 2}
+          title={kind === "text"
+            ? "Captions using it switch to the first remaining style"
+            : "Shapes and overlays using it switch to the first remaining shape style"}
+          onclick={() => shown && projectStore.execute(deleteStyle(shown, undefined, kind))}
+          >Delete</button
+        >
+      </div>
 
-    {#if shown && kind === "text"}
-      <StyleEditor name={shown} />
-    {:else if shown}
-      <ShapeStyleEditor name={shown} />
+      {#if shown && kind === "text"}
+        <StyleEditor name={shown} />
+      {:else if shown}
+        <ShapeStyleEditor name={shown} />
+      {/if}
     {/if}
   </section>
 </div>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { projectStore } from "$lib/commands/store.svelte";
   import { setItemLayer, setItemSpan, setShapeGeometry } from "$lib/commands/items";
+  import { setHideOverlays } from "$lib/commands/overlays";
   import { linkStylesheet, setItemStyle } from "$lib/commands/styles";
   import {
     anyReassigned,
@@ -11,10 +12,10 @@
   } from "$lib/model/stylesheet";
   import { selection } from "$lib/selection.svelte";
   import { stylesheets } from "$lib/stylesheets.svelte";
-  import { chooseSvg } from "$lib/shapes/svg";
   import { snapToFrame } from "$lib/time";
   import CaptionList from "./CaptionList.svelte";
   import NumberField from "./NumberField.svelte";
+  import ShapeFields from "./ShapeFields.svelte";
   import StylesView from "./StylesView.svelte";
   import TimeField from "./TimeField.svelte";
   import VideoInfoPanel from "./VideoInfoPanel.svelte";
@@ -44,19 +45,6 @@
   /** Each typed time is an undo step; a run of ↑/↓ nudges on one field is one. */
   function setTimes(id: string, field: string, start: number, end: number, nudge: boolean) {
     projectStore.execute(setItemSpan(id, start, end, nudge ? `nudge:${id}:${field}` : undefined));
-  }
-
-  /** Swaps a shape's SVG for another file, keeping its width. */
-  async function replaceSvg(id: string) {
-    const svg = await chooseSvg();
-    if (!svg) return;
-    const { name, width: sourceWidth, height: sourceHeight, parts } = svg;
-    projectStore.execute(setShapeGeometry(id, { name, sourceWidth, sourceHeight, parts }));
-  }
-
-  /** Typing in one geometry field is one undo step. */
-  function setGeometry(id: string, field: string, value: number) {
-    projectStore.execute(setShapeGeometry(id, { [field]: value }, `shape:${id}:${field}`));
   }
 
   function switchTo(next: Stylesheet) {
@@ -113,27 +101,18 @@
             {#each styleNames as name (name)}<option value={name}>{name}</option>{/each}
           </select>
           {#if item.type === "shape"}
-            {@const shape = item.shape}
             <NumberField
               label="Layer"
               value={item.layer}
               onchange={(v) => projectStore.execute(setItemLayer(item.id, v))}
             />
-            <NumberField
-              label="Width"
-              value={shape.width}
-              min={1}
-              unit="px"
-              onchange={(v) => setGeometry(item.id, "width", v)}
+            <ShapeFields
+              shape={item.shape}
+              onchange={(changes, field) =>
+                projectStore.execute(
+                  setShapeGeometry(item.id, changes, field && `shape:${item.id}:${field}`),
+                )}
             />
-            <span class="label">Height</span>
-            <span class="muted"
-              >{Number(((shape.width * shape.sourceHeight) / shape.sourceWidth).toFixed(2))} px</span
-            >
-            <span class="label">File</span>
-            <button class="replace" title={shape.name} onclick={() => replaceSvg(item.id)}
-              >Replace SVG…</button
-            >
           {/if}
         </div>
       {:else}
@@ -160,6 +139,17 @@
           </select>
           <button onclick={() => (editingStyles = true)} disabled={!sheet}>Edit styles…</button>
         </div>
+        {#if project.overlays.length > 0}
+          <label class="check" title="The stylesheet's overlays, in this video only">
+            <input
+              type="checkbox"
+              checked={!project.hideOverlays}
+              onchange={(e) => projectStore.execute(setHideOverlays(!e.currentTarget.checked))}
+            />
+            <span class="overlays">Show {project.overlays.map((o) => o.shape.name).join(", ")}</span
+            >
+          </label>
+        {/if}
         {#if pendingSwitch}
           <div class="confirm" role="alert">
             <p>
@@ -255,16 +245,25 @@
     gap: 6px 8px;
   }
 
-  .replace {
-    justify-self: start;
-  }
-
   .props :global(.label) {
     color: var(--muted);
   }
 
   .props select {
     min-width: 0;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .overlays {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .row select {
