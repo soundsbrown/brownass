@@ -182,9 +182,15 @@
 
   .fields {
     display: grid;
-    grid-template-columns: 82px 1fr;
+    /* minmax: long font names must not widen the panel. */
+    grid-template-columns: 82px minmax(0, 1fr);
     align-items: center;
     gap: 5px 8px;
+  }
+
+  select {
+    min-width: 0;
+    max-width: 100%;
   }
 
   .fields :global(.label) {
