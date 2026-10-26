@@ -13,6 +13,13 @@ mod video;
 mod waveform;
 mod woff;
 
+use tauri::{AppHandle, Manager, Runtime};
+
+/// The window title's app part, e.g. "BrownASS 0.4.0".
+pub fn app_title<R: Runtime>(app: &AppHandle<R>) -> String {
+    format!("BrownASS {}", app.package_info().version)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     fonts::warm_up();
@@ -33,6 +40,12 @@ pub fn run() {
         .manage(waveform::WaveformJobs::default())
         .manage(stylesheets::StylesheetFiles::default())
         .manage(export::Exports::default())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_title(&app_title(app.handle()))?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             export::detect_encoders,
             export::export_video,

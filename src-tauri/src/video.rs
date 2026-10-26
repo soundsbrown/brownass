@@ -146,7 +146,11 @@ async fn open(
         .allow_file(&path)
         .map_err(|e| e.to_string())?;
     if let Some(name) = path.file_name() {
-        let _ = window.set_title(&format!("{} — BrownASS", name.to_string_lossy()));
+        let _ = window.set_title(&format!(
+            "{} — {}",
+            name.to_string_lossy(),
+            crate::app_title(app)
+        ));
     }
     opened.set(info.clone());
     // Until load_project runs for this video, nothing may be saved.
