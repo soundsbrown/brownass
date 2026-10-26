@@ -99,6 +99,15 @@ describe("shape style commands", () => {
     expect(Object.keys(p.styles)).toEqual(["Subtitle", "Section title"]);
   });
 
+  it("rename and delete shape styles for overlays too", () => {
+    const shape = { name: "logo.svg", width: 10, sourceWidth: 1, sourceHeight: 1, parts: [] };
+    let p: Project = { ...project(), overlays: [{ id: "o", styleName: "Box", shape }] };
+    p = renameStyle("Box", "Panel", "shape").apply(p);
+    expect(p.overlays[0].styleName).toBe("Panel");
+    p = deleteStyle("Panel", undefined, "shape").apply(p);
+    expect(p.overlays[0].styleName).toBe("Dot");
+  });
+
   it("keep names unique across text and shape styles", () => {
     const p = project();
     expect(renameStyle("Box", "Subtitle", "shape").apply(p)).toBe(p);

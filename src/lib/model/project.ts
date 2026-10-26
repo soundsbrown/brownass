@@ -173,6 +173,18 @@ export const ShapeItemSchema = v.object({
 });
 export type ShapeItem = v.InferOutput<typeof ShapeItemSchema>;
 
+/**
+ * A shape from the stylesheet (e.g. a logo) shown for the whole video, below
+ * every item. Not an item: it has no time or layer of its own.
+ */
+export const OverlaySchema = v.object({
+  id: v.pipe(v.string(), v.minLength(1)),
+  /** A key of `shapeStyles`. */
+  styleName: StyleNameSchema,
+  shape: ShapeGeometrySchema,
+});
+export type Overlay = v.InferOutput<typeof OverlaySchema>;
+
 // Image items join this union as a further variant.
 export const ItemSchema = v.variant("type", [TextItemSchema, ShapeItemSchema]);
 export type Item = v.InferOutput<typeof ItemSchema>;
@@ -187,7 +199,7 @@ export const VideoRefSchema = v.object({
 });
 export type VideoRef = v.InferOutput<typeof VideoRefSchema>;
 
-export const PROJECT_VERSION = 3;
+export const PROJECT_VERSION = 4;
 
 export const ProjectSchema = v.pipe(
   v.object({
@@ -199,6 +211,10 @@ export const ProjectSchema = v.pipe(
     shapeStyles: v.record(StyleNameSchema, ShapeStyleSchema),
     /** Id of the linked stylesheet, whose styles this project follows. */
     stylesheet: v.optional(v.string()),
+    /** The stylesheet's overlays, followed like its styles. */
+    overlays: v.array(OverlaySchema),
+    /** Leaves the stylesheet's overlays out of this video. */
+    hideOverlays: v.boolean(),
     items: v.array(ItemSchema),
   }),
   v.check((p) => p.items.every((i) => i.start < i.end), "Every item must end after it starts"),
@@ -209,6 +225,10 @@ export const ProjectSchema = v.pipe(
   v.check(
     (p) => p.items.every((i) => i.type !== "shape" || i.styleName in p.shapeStyles),
     "Every shape must use an existing shape style",
+  ),
+  v.check(
+    (p) => p.overlays.every((o) => o.styleName in p.shapeStyles),
+    "Every overlay must use an existing shape style",
   ),
   v.check(
     (p) => Object.keys(p.shapeStyles).every((name) => !(name in p.styles)),

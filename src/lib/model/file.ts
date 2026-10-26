@@ -30,6 +30,8 @@ const MIGRATIONS: Record<number, (old: Record<string, unknown>) => Record<string
   // v3: shape items, styled by shape styles. Linking to the stylesheet fills
   // these in on open.
   2: (old) => ({ ...old, shapeStyles: {} }),
+  // v4: stylesheet overlays (filled in on open) and a per-video switch.
+  3: (old) => ({ ...old, overlays: [], hideOverlays: false }),
 };
 
 export class ProjectFileError extends Error {}

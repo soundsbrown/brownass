@@ -1,4 +1,4 @@
-import type { AssStyle, Item, Project, ShapeStyle } from "$lib/model/project";
+import type { AssStyle, Item, Overlay, Project, ShapeStyle } from "$lib/model/project";
 import { conformToStylesheet, type Stylesheet } from "$lib/model/stylesheet";
 import type { Command } from "./history";
 
@@ -31,6 +31,12 @@ function uses(item: Item, kind: StyleKind, name: string): boolean {
   );
 }
 
+/** The project's overlays, with shape style `from` replaced by `to`. */
+function renamed(p: Project, kind: StyleKind, from: string, to: string): Overlay[] {
+  if (kind !== "shape" || !p.overlays.some((o) => o.styleName === from)) return p.overlays;
+  return p.overlays.map((o) => (o.styleName === from ? { ...o, styleName: to } : o));
+}
+
 /** Whether `name` is free in both style lists. */
 export function styleNameFree(p: Project, name: string): boolean {
   return !(name in p.styles) && !(name in p.shapeStyles);
@@ -47,8 +53,8 @@ export function addStyle(name: string, style: AnyStyle, kind: StyleKind = "text"
 }
 
 /**
- * Removes a style. Items using it switch to `replacement` (by default the
- * first remaining style of that kind). The last style can't be removed.
+ * Removes a style. Items and overlays using it switch to `replacement` (by
+ * default the first remaining style of that kind). The last style can't be removed.
  */
 export function deleteStyle(name: string, replacement?: string, kind: StyleKind = "text"): Command {
   return {
@@ -60,12 +66,12 @@ export function deleteStyle(name: string, replacement?: string, kind: StyleKind 
       delete styles[name];
       const fallback = replacement && replacement in styles ? replacement : Object.keys(styles)[0];
       const items = p.items.map((i) => (uses(i, kind, name) ? { ...i, styleName: fallback } : i));
-      return { ...withStyles(p, kind, styles), items };
+      return { ...withStyles(p, kind, styles), items, overlays: renamed(p, kind, name, fallback) };
     },
   };
 }
 
-/** Renames a style in place (keeping its position) and in every item using it. */
+/** Renames a style in place (keeping its position) and wherever it's used. */
 export function renameStyle(from: string, to: string, kind: StyleKind = "text"): Command {
   return {
     label: "Rename style",
@@ -77,7 +83,7 @@ export function renameStyle(from: string, to: string, kind: StyleKind = "text"):
         Object.entries(current).map(([n, s]) => [n === from ? name : n, s]),
       );
       const items = p.items.map((i) => (uses(i, kind, from) ? { ...i, styleName: name } : i));
-      return { ...withStyles(p, kind, styles), items };
+      return { ...withStyles(p, kind, styles), items, overlays: renamed(p, kind, from, name) };
     },
   };
 }

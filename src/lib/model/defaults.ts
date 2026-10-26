@@ -66,6 +66,8 @@ export function createProject(video: VideoRef): Project {
     playRes,
     styles: { [DEFAULT_STYLE]: defaultStyle() },
     shapeStyles: {},
+    overlays: [],
+    hideOverlays: false,
     items: [],
   };
 }

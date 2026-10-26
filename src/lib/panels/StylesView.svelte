@@ -94,6 +94,7 @@
       ),
       styles: { ...sheet.styles },
       shapeStyles: { ...sheet.shapeStyles },
+      overlays: [...sheet.overlays],
     };
     await stylesheets.put(created);
     // Same styles, so no caption changes.

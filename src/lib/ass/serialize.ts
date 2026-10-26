@@ -39,12 +39,13 @@ export function serializeAss(project: Project): string {
   const shapeStyles = Object.fromEntries(
     Object.entries(project.shapeStyles).map(([name, s]) => [name, scaleShapeStyle(s, factor)]),
   );
+  const items = withOverlays(project);
   const context: EventContext = {
     styles,
     shapeStyles,
     playRes: project.playRes,
     factor,
-    splitLayers: project.items.some((item) => shadowOf(item, styles, shapeStyles) !== null),
+    splitLayers: items.some((item) => shadowOf(item, styles, shapeStyles) !== null),
   };
   const lines = [
     "[Script Info]",
@@ -62,9 +63,27 @@ export function serializeAss(project: Project): string {
     "",
     "[Events]",
     `Format: ${EVENT_FORMAT}`,
-    ...sortedForOutput(project.items).flatMap((item) => eventLines(item, context)),
+    ...sortedForOutput(items).flatMap((item) => eventLines(item, context)),
   ];
   return lines.join("\n") + "\n";
+}
+
+/**
+ * The items to write, with the stylesheet's overlays (unless hidden) as shapes
+ * lasting the whole video on layer 0, below every item: items move up a layer.
+ */
+function withOverlays(project: Project): Item[] {
+  if (project.hideOverlays || project.overlays.length === 0) return project.items;
+  const overlays = project.overlays.map((o): ShapeItem => ({
+    id: o.id,
+    type: "shape",
+    start: 0,
+    end: project.video.duration,
+    layer: 0,
+    styleName: o.styleName,
+    shape: o.shape,
+  }));
+  return [...overlays, ...project.items.map((i) => ({ ...i, layer: i.layer + 1 }))];
 }
 
 /** Events in time order (then layer), which is what other tools expect. */

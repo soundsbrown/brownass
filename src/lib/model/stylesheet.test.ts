@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createProject, defaultShapeStyle } from "./defaults";
-import type { Item, Project, TextItem } from "./project";
+import type { Item, Overlay, Project, TextItem } from "./project";
 import {
   conformToStylesheet,
   describeReassigned,
@@ -13,6 +13,18 @@ import {
 } from "./stylesheet";
 
 const sheet = houseStyle("house");
+
+const logo: Overlay = {
+  id: "logo",
+  styleName: "Shape",
+  shape: {
+    name: "logo.svg",
+    width: 100,
+    sourceWidth: 10,
+    sourceHeight: 10,
+    parts: [{ color: { r: 255, g: 0, b: 0, a: 255 }, path: "m 0 0 l 10 0 10 10" }],
+  },
+};
 
 function project(styleNames: string[]): Project {
   const p = createProject({ path: "v", width: 1920, height: 1080, fps: 25, duration: 60 });
@@ -57,9 +69,21 @@ describe("stylesheet file", () => {
       styles: { Shape: sheet.styles.Subtitle },
     };
     const upgraded = parseStylesheet(JSON.stringify(v1));
-    expect(upgraded.version).toBe(2);
+    expect(upgraded.version).toBe(3);
     expect(upgraded.styles).toEqual(v1.styles);
     expect(upgraded.shapeStyles).toEqual({ "Shape 2": defaultShapeStyle() });
+    expect(upgraded.overlays).toEqual([]);
+  });
+
+  it("upgrades v2 files without overlays", () => {
+    const { overlays, ...v2 } = { ...sheet, version: 2 };
+    expect(overlays).toEqual([]);
+    expect(parseStylesheet(JSON.stringify(v2))).toEqual(sheet);
+  });
+
+  it("needs overlays to use one of its shape styles", () => {
+    const bad = { ...sheet, overlays: [{ ...logo, styleName: "Subtitle" }] };
+    expect(() => parseStylesheet(JSON.stringify(bad))).toThrow(/overlay/);
   });
 });
 
@@ -71,6 +95,13 @@ describe("conformToStylesheet", () => {
     // "Default" from createProject is gone.
     expect(p.styles).toEqual(sheet.styles);
     expect(p.shapeStyles).toEqual(sheet.shapeStyles);
+  });
+
+  it("gives the project the stylesheet's overlays", () => {
+    const withLogo = { ...sheet, overlays: [logo] };
+    expect(conformToStylesheet(project([]), withLogo).project.overlays).toEqual([logo]);
+    const old = { ...project([]), overlays: [logo] };
+    expect(conformToStylesheet(old, sheet).project.overlays).toEqual([]);
   });
 
   it("keeps captions' styles the stylesheet has, and reassigns the rest", () => {

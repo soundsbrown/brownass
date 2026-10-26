@@ -2,6 +2,7 @@ import * as v from "valibot";
 import { defaultShapeStyle, defaultStyle } from "./defaults";
 import {
   AssStyleSchema,
+  OverlaySchema,
   ShapeStyleSchema,
   StyleNameSchema,
   type AssStyle,
@@ -12,7 +13,7 @@ import {
  * A stylesheet ("house style"): named styles shared by every project linked
  * to it. Values are in 1080-line reference pixels, like project styles.
  */
-export const STYLESHEET_VERSION = 2;
+export const STYLESHEET_VERSION = 3;
 
 export const StylesheetSchema = v.pipe(
   v.object({
@@ -30,10 +31,16 @@ export const StylesheetSchema = v.pipe(
         "A stylesheet needs at least one shape style",
       ),
     ),
+    /** Shapes (e.g. a logo) shown on every video linked to this stylesheet. */
+    overlays: v.array(OverlaySchema),
   }),
   v.check(
     (sheet) => Object.keys(sheet.shapeStyles).every((name) => !(name in sheet.styles)),
     "Shape styles and text styles need different names",
+  ),
+  v.check(
+    (sheet) => sheet.overlays.every((o) => o.styleName in sheet.shapeStyles),
+    "Every overlay must use an existing shape style",
   ),
 );
 export type Stylesheet = v.InferOutput<typeof StylesheetSchema>;
@@ -50,13 +57,15 @@ export function uniqueStyleName(base: string, taken: Iterable<string>): string {
 /** Upgrades older stylesheet files; unknown shapes are left for validation. */
 function migrate(data: unknown): unknown {
   if (typeof data !== "object" || data === null) return data;
-  const sheet = data as Record<string, unknown>;
+  let sheet = data as Record<string, unknown>;
   // v2: shape styles. Give old stylesheets one, so shapes always have a style.
   if (sheet.version === 1 && typeof sheet.styles === "object" && sheet.styles !== null) {
     const name = uniqueStyleName("Shape", Object.keys(sheet.styles));
-    return { ...sheet, version: 2, shapeStyles: { [name]: defaultShapeStyle() } };
+    sheet = { ...sheet, version: 2, shapeStyles: { [name]: defaultShapeStyle() } };
   }
-  return data;
+  // v3: overlays.
+  if (sheet.version === 2) sheet = { ...sheet, version: 3, overlays: [] };
+  return sheet;
 }
 
 export function parseStylesheet(json: string): Stylesheet {
@@ -91,6 +100,7 @@ export function houseStyle(id: string): Stylesheet {
       },
     },
     shapeStyles: { Shape: defaultShapeStyle() },
+    overlays: [],
   };
 }
 
@@ -144,6 +154,7 @@ export function conformToStylesheet(
       stylesheet: sheet.id,
       styles: { ...sheet.styles },
       shapeStyles: { ...sheet.shapeStyles },
+      overlays: [...sheet.overlays],
       items,
     },
     reassigned,

@@ -62,6 +62,7 @@ class Session {
   /** The project's styles as last mirrored to its stylesheet. */
   #syncedStyles: Project["styles"] | undefined;
   #syncedShapeStyles: Project["shapeStyles"] | undefined;
+  #syncedOverlays: Project["overlays"] | undefined;
   #syncedSheet: string | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #saving: Promise<void> = Promise.resolve();
@@ -202,6 +203,7 @@ class Session {
     projectStore.reset(project);
     this.#syncedStyles = project.styles;
     this.#syncedShapeStyles = project.shapeStyles;
+    this.#syncedOverlays = project.overlays;
     this.#syncedSheet = project.stylesheet;
     this.#savedRevision = projectStore.revision;
     this.saveStatus = "clean";
@@ -238,7 +240,7 @@ class Session {
     return { project: linked, notes };
   }
 
-  /** A linked project's styles are its stylesheet's: write changes back. */
+  /** A linked project's styles and overlays are its stylesheet's: write changes back. */
   #mirrorStyles(): void {
     const project = projectStore.project;
     if (!project || !this.#canSave) return;
@@ -246,12 +248,16 @@ class Session {
     // Switching stylesheets isn't an edit of either one.
     const sameSheet = project.stylesheet === this.#syncedSheet;
     const changed =
-      project.styles !== this.#syncedStyles || project.shapeStyles !== this.#syncedShapeStyles;
+      project.styles !== this.#syncedStyles ||
+      project.shapeStyles !== this.#syncedShapeStyles ||
+      project.overlays !== this.#syncedOverlays;
     if (sheet && sameSheet && changed) {
-      void stylesheets.put({ ...sheet, styles: project.styles, shapeStyles: project.shapeStyles });
+      const { styles, shapeStyles, overlays } = project;
+      void stylesheets.put({ ...sheet, styles, shapeStyles, overlays });
     }
     this.#syncedStyles = project.styles;
     this.#syncedShapeStyles = project.shapeStyles;
+    this.#syncedOverlays = project.overlays;
     this.#syncedSheet = project.stylesheet;
   }
 
@@ -297,7 +303,7 @@ function videoRef(info: VideoInfo): VideoRef {
 }
 
 function sameContent(a: Project, b: Project): boolean {
-  const content = (p: Project) => JSON.stringify([p.styles, p.shapeStyles, p.items]);
+  const content = (p: Project) => JSON.stringify([p.styles, p.shapeStyles, p.overlays, p.items]);
   return content(a) === content(b);
 }
 

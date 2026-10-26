@@ -62,9 +62,16 @@ describe("migrations", () => {
   });
 
   it("upgrades v2: no shape styles yet", () => {
-    const { shapeStyles, ...v2 } = { ...sample(), version: 2 };
-    expect(shapeStyles).toEqual({});
+    const { shapeStyles, overlays, hideOverlays, ...v2 } = { ...sample(), version: 2 };
+    expect([shapeStyles, overlays, hideOverlays]).toEqual([{}, [], false]);
     const p = parseProjectFile(JSON.stringify(v2));
+    expect(p).toEqual(sample());
+  });
+
+  it("upgrades v3: no overlays, shown", () => {
+    const { overlays, hideOverlays, ...v3 } = { ...sample(), version: 3 };
+    expect([overlays, hideOverlays]).toEqual([[], false]);
+    const p = parseProjectFile(JSON.stringify(v3));
     expect(p).toEqual(sample());
   });
 });

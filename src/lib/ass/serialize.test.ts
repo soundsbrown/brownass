@@ -285,3 +285,60 @@ describe("shapes", () => {
     expect(logo[1]).toContain(String.raw`\1a&HBF&`);
   });
 });
+
+describe("overlays", () => {
+  function overlayProject(): Project {
+    const p = createProject({ path: "o.mp4", width: 1280, height: 720, fps: 25, duration: 60 });
+    p.shapeStyles = { Corner: { ...defaultShapeStyle(), alignment: 9 } };
+    p.overlays = [
+      {
+        id: "logo",
+        styleName: "Corner",
+        shape: {
+          name: "logo.svg",
+          width: 120,
+          sourceWidth: 10,
+          sourceHeight: 10,
+          parts: [{ color: { r: 255, g: 0, b: 0, a: 255 }, path: "m 0 0 l 10 0 10 10 0 10" }],
+        },
+      },
+    ];
+    p.items = [
+      { id: "a", type: "text", start: 1, end: 2, layer: 0, text: "a", styleName: "Default" },
+      { id: "b", type: "text", start: 3, end: 4, layer: 2, text: "b", styleName: "Default" },
+    ];
+    return p;
+  }
+
+  const events = (p: Project) =>
+    serializeAss(p)
+      .split("\n")
+      .filter((l) => l.startsWith("Dialogue:"))
+      .map((l) => l.split(","));
+
+  it("lasts the whole video, below every item", () => {
+    const [logo, a, b] = events(overlayProject());
+    expect(logo.slice(0, 4)).toEqual(["Dialogue: 0", "0:00:00.00", "0:01:00.00", "Corner"]);
+    expect(a[0]).toBe("Dialogue: 1");
+    expect(b[0]).toBe("Dialogue: 3");
+  });
+
+  it("stays below items and their shadows when shadows split the layers", () => {
+    const p = overlayProject();
+    p.styles.Default = { ...p.styles.Default, shadow: 2 };
+    expect(events(p).map((e) => e[0])).toEqual([
+      "Dialogue: 1",
+      "Dialogue: 2",
+      "Dialogue: 3",
+      "Dialogue: 6",
+      "Dialogue: 7",
+    ]);
+  });
+
+  it("can be hidden per video, leaving the items as they are", () => {
+    const p = overlayProject();
+    const without = { ...p, overlays: [] };
+    expect(serializeAss({ ...p, hideOverlays: true })).toBe(serializeAss(without));
+    expect(events(without).map((e) => e[0])).toEqual(["Dialogue: 0", "Dialogue: 2"]);
+  });
+});

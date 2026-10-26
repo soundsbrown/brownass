@@ -30,7 +30,8 @@ export function ffmpegRange(range: ExportRange, fps: number): FfmpegRange {
 /**
  * The project as seen from `seek`: only captions overlapping the range,
  * clipped to it and shifted back by `seek`. Exported with an input seek to
- * the same point, its subtitles line up with the trimmed video exactly.
+ * the same point, its subtitles line up with the trimmed video exactly. The
+ * video ends with the range, and so do the stylesheet's overlays.
  */
 export function projectForRange(project: Project, range: ExportRange, seek: Seconds): Project {
   const items = project.items.flatMap((item) => {
@@ -38,5 +39,5 @@ export function projectForRange(project: Project, range: ExportRange, seek: Seco
     const end = Math.min(item.end, range.end);
     return end > start ? [{ ...item, start: start - seek, end: end - seek }] : [];
   });
-  return { ...project, items };
+  return { ...project, video: { ...project.video, duration: range.end - seek }, items };
 }

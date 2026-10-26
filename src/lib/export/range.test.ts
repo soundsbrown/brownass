@@ -62,4 +62,8 @@ describe("projectForRange", () => {
       "Dialogue: 0,0:00:02.01,0:00:03.00,Default,,0,0,0,,inside",
     );
   });
+
+  it("ends the video, and so the stylesheet's overlays, with the range", () => {
+    expect(shifted.video.duration).toBeCloseTo(15 - seek);
+  });
 });
