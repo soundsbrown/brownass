@@ -11,7 +11,7 @@ use tauri_plugin_dialog::DialogExt;
 use crate::dialogs;
 use crate::ffmpeg::{self, FfmpegPaths, FfmpegState};
 use crate::project_files::ProjectFiles;
-use crate::settings::Settings;
+use crate::settings::{MAX_RECENT, Settings};
 
 const VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "m4v", "mov", "mkv", "webm", "avi", "wmv", "mpg", "mpeg", "ts", "m2ts", "mts",
@@ -103,6 +103,8 @@ pub async fn recent_videos(app: AppHandle) -> Vec<RecentVideo> {
     Settings::load(&app)
         .recent_videos
         .into_iter()
+        // Settings saved by older versions may hold more.
+        .take(MAX_RECENT)
         .map(|path| RecentVideo {
             exists: path.is_file(),
             path,

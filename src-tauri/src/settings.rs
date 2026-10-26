@@ -18,7 +18,7 @@ pub struct Settings {
 }
 
 /// How many recent videos to remember.
-pub const MAX_RECENT: usize = 10;
+pub const MAX_RECENT: usize = 5;
 
 impl Settings {
     /// Puts `video` at the front of the recent list (once).
@@ -89,16 +89,16 @@ mod tests {
         }
         assert_eq!(s.recent_videos.len(), MAX_RECENT);
         assert_eq!(s.recent_videos[0], PathBuf::from(r"C:\v\11.mp4"));
-        s.add_recent(Path::new(r"C:\v\5.mp4"));
-        assert_eq!(s.recent_videos[0], PathBuf::from(r"C:\v\5.mp4"));
+        s.add_recent(Path::new(r"C:\v\9.mp4"));
+        assert_eq!(s.recent_videos[0], PathBuf::from(r"C:\v\9.mp4"));
         assert_eq!(
             s.recent_videos
                 .iter()
-                .filter(|p| p.ends_with("5.mp4"))
+                .filter(|p| p.ends_with("9.mp4"))
                 .count(),
             1
         );
-        assert!(s.is_recent(Path::new(r"C:\v\9.mp4")));
+        assert!(s.is_recent(Path::new(r"C:\v\7.mp4")));
         assert!(!s.is_recent(Path::new(r"C:\v\0.mp4")), "fell off the end");
     }
 
