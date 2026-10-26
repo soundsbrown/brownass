@@ -8,6 +8,8 @@ Built with Tauri 2, Svelte 5 and TypeScript; previews and exports both render wi
 
 ## Installing
 
+No prebuilt installer is published, so build it from source first: with the [prerequisites](#prerequisites) installed, run `npm install` and then `npm run dist`, which puts `BrownASS_<version>_x64-setup.exe` in `dist/`.
+
 Run `BrownASS_<version>_x64-setup.exe`. It installs for the current user (no administrator rights needed) and downloads Microsoft WebView2 if it isn't already installed (it is on Windows 11).
 
 The installer isn't code-signed, so Windows SmartScreen may warn on first run: choose **More info → Run anyway**.
