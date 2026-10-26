@@ -1,6 +1,10 @@
 # BrownASS
 
-A lightweight desktop editor for authoring ASS subtitles on top of a video, built with Tauri 2, Svelte 5 and TypeScript. Windows is currently the only supported platform.
+A lightweight desktop tool for adding consistently styled on-screen text to finished videos: explanatory captions, section titles, SVG graphics and a logo, without opening a video editor. It suits videos without speech, such as product demos, screen recordings and tutorials, where captions are written rather than transcribed.
+
+Looks are defined once in a shared **stylesheet** (a "house style" of named text and shape styles, plus optional overlays such as a logo). Every video linked to it follows it, and captions only pick a style, so a whole series of videos stays consistent. The result is burned into a copy of the video with ffmpeg, or kept as an `.ass` subtitle file next to it. Everything runs locally.
+
+Built with Tauri 2, Svelte 5 and TypeScript; previews and exports both render with libass. Windows is currently the only supported platform.
 
 ## Installing
 
@@ -17,7 +21,7 @@ winget install Gyan.FFmpeg
 ## Using BrownASS
 
 1. **Open a video** (Ctrl+O, or pick one from the recent list).
-2. **Drag in the timeline** below the ruler to create a caption, then type its text. Shift+Enter starts a new line; the **B / I / U** buttons format the selected text.
+2. **Drag in the timeline** below the ruler to create a caption, then type its text. Shift+Enter starts a new line; the **B / I / U** buttons format the selected text. **Add SVG…** in the transport bar places an SVG graphic at the playhead.
 3. **Adjust timing** by dragging a caption's middle (move) or edges (resize). Edges snap to frames, the playhead and other captions (hold Alt to turn edge snapping off). For exact times, type them under **Properties** (`0:01:23.5`, `1:23.5` or `83.5`; ↑/↓ change them by a frame, Shift by a second).
 4. **Style** captions by choosing a style in **Properties**. Styles come from the video's stylesheet; **Edit styles…** changes them for every video that uses the stylesheet.
 5. **Export** (Ctrl+E) to burn the subtitles into a copy of the video (all of it, the selected caption's part, or a custom range), or save an MKV with them as a separate track.
