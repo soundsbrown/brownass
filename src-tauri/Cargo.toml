@@ -38,6 +38,14 @@ base64 = "0.22"
 tokio = { version = "1", features = ["macros", "rt"] }
 
 
+# Full debug info makes debug builds several GB; line tables keep file:line in
+# panics and backtraces.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1
