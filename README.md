@@ -2,6 +2,10 @@
 
 A lightweight desktop tool for adding consistently styled on-screen text to finished videos: explanatory captions, section titles, SVG graphics and a logo, without opening a video editor. It suits videos without speech, such as product demos, screen recordings and tutorials, where captions are written rather than transcribed.
 
+<div style="display: flex;">
+  <img src="screenshot.jpg" alt="Screenshot of BrownASS" width="50%">
+</div>
+
 Looks are defined once in a shared **stylesheet** (a "house style" of named text and shape styles, plus optional overlays such as a logo). Every video linked to it follows it, and captions only pick a style, so a whole series of videos stays consistent. The result is burned into a copy of the video with ffmpeg, or kept as an `.ass` subtitle file next to it. Everything runs locally.
 
 Built with Tauri 2, Svelte 5 and TypeScript; previews and exports both render with libass. Windows is currently the only supported platform.
